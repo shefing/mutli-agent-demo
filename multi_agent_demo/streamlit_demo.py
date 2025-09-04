@@ -82,8 +82,12 @@ def check_environment_setup():
     
     missing_vars = []
     for var, description in required_vars.items():
-        if not os.getenv(var):
+        # Check both environment variables and Streamlit secrets
+        if not os.getenv(var) and var not in st.secrets:
             missing_vars.append((var, description))
+        elif var in st.secrets:
+            # Set environment variable from Streamlit secrets
+            os.environ[var] = st.secrets[var]
     
     return missing_vars
 
