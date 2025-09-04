@@ -1,0 +1,8 @@
+# Core dependencies
+langchain==0.3.26
+langchain-openai
+langchain-community
+langgraph
+llamafirewall
+python-dotenv
+pydantic
