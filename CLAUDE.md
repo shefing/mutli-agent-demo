@@ -6,20 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Running the Application
 ```bash
-# Main CLI interface with interactive and automated testing modes
-python multi_agent_demo/main.py
+# AlignmentCheck Testing Tools (No LangChain dependencies needed)
+python test_alignment.py  # Choose option 2 for standalone tester
+
+# Or run directly:
+python multi_agent_demo/alignment_check_standalone.py  # Standalone CLI tester
+streamlit run multi_agent_demo/alignment_tester_ui.py   # Visual UI tester
+
+# Full Multi-Agent Demo (Requires all dependencies)
+python multi_agent_demo/main.py  # Requires LangChain dependencies
 
 # Web-based demo with Streamlit dashboard
 streamlit run multi_agent_demo/streamlit_demo.py
 
 # Standalone LlamaFirewall demonstration
 python multi_agent_demo/demo_standalone_agent.py
-
-# Interactive AlignmentCheck scanner testing
-python multi_agent_demo/alignment_check_tester.py
-
-# Visual AlignmentCheck testing UI
-streamlit run multi_agent_demo/alignment_tester_ui.py
 ```
 
 ### Testing

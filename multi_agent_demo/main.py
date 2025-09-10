@@ -221,13 +221,40 @@ def main():
         input("\nPress Enter to start interactive demo...")
         run_interactive_demo()
     elif choice == "5":
-        import alignment_check_tester
-        alignment_check_tester.main()
+        # Import from current directory since main.py is in multi_agent_demo/
+        import sys
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, current_dir)
+        
+        # Try to import the tester
+        try:
+            import alignment_check_tester
+            alignment_check_tester.main()
+        except ImportError as e:
+            print(f"Error: Could not import alignment_check_tester: {e}")
+            print("Running standalone version instead...")
+            # Use the standalone version that doesn't need LangChain
+            standalone_path = os.path.join(os.path.dirname(current_dir), "alignment_check_standalone.py")
+            if os.path.exists(standalone_path):
+                import subprocess
+                subprocess.run([sys.executable, standalone_path])
+            else:
+                print(f"Standalone tester not found at {standalone_path}")
+                
     elif choice == "6":
         print("\nLaunching AlignmentCheck UI...")
-        print("Run: streamlit run alignment_tester_ui.py")
         import subprocess
-        subprocess.run(["streamlit", "run", "alignment_tester_ui.py"])
+        import sys
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        ui_path = os.path.join(current_dir, "alignment_tester_ui.py")
+        
+        if os.path.exists(ui_path):
+            print(f"Run: streamlit run {ui_path}")
+            subprocess.run(["streamlit", "run", ui_path])
+        else:
+            print(f"UI tester not found at {ui_path}")
     else:
         print("Invalid choice. Please enter 1-6.")
 
