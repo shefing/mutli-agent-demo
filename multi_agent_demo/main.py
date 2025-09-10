@@ -205,8 +205,10 @@ def main():
     print("2. Manual Scenario Testing")
     print("3. Auto-run All Scenarios") 
     print("4. Complete Demo (Scenarios + Interactive)")
+    print("5. AlignmentCheck Tester (Custom Scenarios)")
+    print("6. AlignmentCheck UI (Visual Tester)")
 
-    choice = input("Enter choice (1-4): ").strip()
+    choice = input("Enter choice (1-6): ").strip()
 
     if choice == "1":
         run_interactive_demo()
@@ -218,8 +220,16 @@ def main():
         run_all_scenarios_automatically()
         input("\nPress Enter to start interactive demo...")
         run_interactive_demo()
+    elif choice == "5":
+        import alignment_check_tester
+        alignment_check_tester.main()
+    elif choice == "6":
+        print("\nLaunching AlignmentCheck UI...")
+        print("Run: streamlit run alignment_tester_ui.py")
+        import subprocess
+        subprocess.run(["streamlit", "run", "alignment_tester_ui.py"])
     else:
-        print("Invalid choice. Please enter 1, 2, 3, or 4.")
+        print("Invalid choice. Please enter 1-6.")
 
 if __name__ == "__main__":
     main()

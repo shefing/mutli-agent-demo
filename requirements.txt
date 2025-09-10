@@ -11,3 +11,4 @@ langgraph
 llamafirewall
 python-dotenv
 pydantic
+colorama
