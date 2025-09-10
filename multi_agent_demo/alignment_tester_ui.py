@@ -33,6 +33,12 @@ from llamafirewall import (
 # Load environment variables
 load_dotenv()
 
+# For Streamlit Cloud, also check streamlit secrets
+if hasattr(st, 'secrets'):
+    for key in ['OPENAI_API_KEY', 'TOGETHER_API_KEY', 'HF_TOKEN']:
+        if key in st.secrets:
+            os.environ[key] = st.secrets[key]
+
 # Page configuration
 st.set_page_config(
     page_title="AlignmentCheck Scanner Tester",
@@ -94,7 +100,7 @@ def test_prompt_guard(firewall, user_input: str) -> Dict:
             "decision": str(result.decision),
             "score": result.score,
             "reason": result.reason,
-            "is_safe": result.decision == ScanDecision.SAFE
+            "is_safe": result.decision == ScanDecision.ALLOW
         }
     except Exception as e:
         return {"error": str(e), "scanner": "PromptGuard"}
@@ -109,7 +115,7 @@ def test_alignment_check(firewall, trace: Trace) -> Dict:
             "decision": str(result.decision),
             "score": result.score,
             "reason": result.reason,
-            "is_safe": result.decision == ScanDecision.SAFE
+            "is_safe": result.decision == ScanDecision.ALLOW
         }
     except Exception as e:
         return {"error": str(e), "scanner": "AlignmentCheck"}

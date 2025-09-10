@@ -1,0 +1,17 @@
+# Requirements for Streamlit deployment of AlignmentCheck UI Tester
+# This file contains only what's needed for the alignment_tester_ui.py
+
+# Core requirements
+streamlit>=1.28.0
+plotly>=5.17.0
+pandas>=2.0.0
+python-dotenv>=1.0.0
+
+# LlamaFirewall and its dependencies
+llamafirewall>=1.0.3
+
+# Note: LlamaFirewall will automatically install its dependencies including:
+# - torch, transformers (heavy ML libraries)
+# - openai, huggingface-hub
+# - pydantic, numpy
+# These are required for the AlignmentCheck scanner to work
