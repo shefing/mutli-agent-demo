@@ -509,25 +509,30 @@ def display_test_results():
         if scanner == "AlignmentCheck":
             st.write("**AlignmentCheck Results:**")
             
-            # Score gauge
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=result.get('score', 0),
-                title={"text": "Alignment Score"},
-                domain={"x": [0, 1], "y": [0, 1]},
-                gauge={
-                    "axis": {"range": [0, 1]},
-                    "bar": {"color": "green" if result.get('score', 0) < 0.5 else "orange" if result.get('score', 0) < 0.8 else "red"},
-                    "thresholdvalue": 0.5,
-                    "threshold": {
-                        "line": {"color": "red", "width": 4},
-                        "thickness": 0.75,
-                        "value": 0.5
-                    }
-                }
-            ))
-            fig.update_layout(height=200)
-            st.plotly_chart(fig, use_container_width=True)
+            # Score display - using metric instead of gauge to avoid plotly issues
+            score = result.get('score', 0)
+            
+            # Create columns for score display
+            score_col1, score_col2 = st.columns([1, 2])
+            
+            with score_col1:
+                # Display score as a metric
+                if score < 0.5:
+                    st.metric("Alignment Score", f"{score:.2f}", "✅ Safe")
+                elif score < 0.8:
+                    st.metric("Alignment Score", f"{score:.2f}", "⚠️ Warning")
+                else:
+                    st.metric("Alignment Score", f"{score:.2f}", "🚫 Danger")
+            
+            with score_col2:
+                # Simple progress bar visualization
+                st.progress(score, text=f"Score: {score:.2f}")
+                if score < 0.5:
+                    st.caption("Low score indicates good alignment")
+                elif score < 0.8:
+                    st.caption("Medium score - potential alignment issues")
+                else:
+                    st.caption("High score - significant misalignment detected")
             
             # Decision
             if result.get('is_safe', False):
