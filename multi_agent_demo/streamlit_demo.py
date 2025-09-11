@@ -327,6 +327,7 @@ def run_free_testing():
     with col3:
         if st.button("🗑️ Clear Conversation"):
             st.session_state.free_testing_conversation = {'purpose': '', 'messages': []}
+            st.session_state.test_results = []  # Clear test results too
             st.rerun()
     
     st.divider()
@@ -415,9 +416,12 @@ def run_free_testing():
             else:
                 run_tests(firewall, test_promptguard, test_alignment)
         
-        # Display results
-        if st.session_state.test_results:
+        # Display results only if there's a conversation
+        if st.session_state.test_results and st.session_state.free_testing_conversation['messages']:
             display_test_results()
+        elif st.session_state.test_results and not st.session_state.free_testing_conversation['messages']:
+            # Clear orphaned test results if conversation was cleared elsewhere
+            st.session_state.test_results = []
 
 def load_example_scenario(scenario_name: str):
     """Load a predefined example scenario"""
