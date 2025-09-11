@@ -121,6 +121,8 @@ if 'free_testing_conversation' not in st.session_state:
     }
 if 'test_results' not in st.session_state:
     st.session_state.test_results = []
+if 'saved_conversations' not in st.session_state:
+    st.session_state.saved_conversations = {}
 
 def check_environment_setup():
     """Check if required environment variables are set"""
@@ -398,14 +400,62 @@ def run_free_testing():
                     except json.JSONDecodeError:
                         st.error("Invalid JSON in parameters")
         
-        # Load example button
+        # Save conversation section
         st.divider()
-        example_options = ["", "Legitimate Banking", "Goal Hijacking", "Data Exfiltration", "Prompt Injection"]
-        example = st.selectbox("Load Example Scenario", example_options)
+        st.write("**Save/Load Scenarios:**")
         
-        if st.button("📥 Load Example") and example:
-            load_example_scenario(example)
-            st.rerun()
+        # Save conversation
+        save_col1, save_col2, save_col3 = st.columns([3, 1, 1])
+        with save_col1:
+            conversation_name = st.text_input("Scenario name", placeholder="e.g., My Attack Test")
+        with save_col2:
+            if st.button("💾 Save", use_container_width=True):
+                if conversation_name and st.session_state.free_testing_conversation['messages']:
+                    st.session_state.saved_conversations[conversation_name] = {
+                        'purpose': st.session_state.free_testing_conversation['purpose'],
+                        'messages': st.session_state.free_testing_conversation['messages'].copy()
+                    }
+                    st.success(f"Saved '{conversation_name}'!")
+                    st.rerun()
+                elif not conversation_name:
+                    st.warning("Please enter a name")
+                else:
+                    st.warning("No conversation to save")
+        with save_col3:
+            # Delete saved conversation button
+            if st.session_state.saved_conversations:
+                if st.button("🗑️ Delete", use_container_width=True):
+                    if conversation_name in st.session_state.saved_conversations:
+                        del st.session_state.saved_conversations[conversation_name]
+                        st.success(f"Deleted '{conversation_name}'")
+                        st.rerun()
+        
+        # Load saved or example scenarios
+        # Combine built-in examples with saved conversations
+        example_options = [""]
+        example_options.extend(["Legitimate Banking", "Goal Hijacking", "Data Exfiltration", "Prompt Injection"])
+        if st.session_state.saved_conversations:
+            example_options.append("--- Saved Scenarios ---")
+            example_options.extend(list(st.session_state.saved_conversations.keys()))
+        
+        # Show count of saved scenarios
+        if st.session_state.saved_conversations:
+            st.caption(f"📚 {len(st.session_state.saved_conversations)} saved scenario(s)")
+        
+        selected_scenario = st.selectbox("Load Scenario", example_options)
+        
+        if st.button("📥 Load") and selected_scenario and selected_scenario != "--- Saved Scenarios ---":
+            if selected_scenario in st.session_state.saved_conversations:
+                # Load saved conversation
+                st.session_state.free_testing_conversation = st.session_state.saved_conversations[selected_scenario].copy()
+                st.session_state.test_results = []  # Clear old test results
+                st.success(f"Loaded '{selected_scenario}'")
+                st.rerun()
+            elif selected_scenario in ["Legitimate Banking", "Goal Hijacking", "Data Exfiltration", "Prompt Injection"]:
+                # Load built-in example
+                load_example_scenario(selected_scenario)
+                st.session_state.test_results = []  # Clear old test results
+                st.rerun()
     
     with col_right:
         st.subheader("🔍 Test Results")
