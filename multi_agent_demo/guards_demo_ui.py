@@ -30,14 +30,19 @@ from llamafirewall import (
     UserMessage,
 )
 
-# Load environment variables
+# Load environment variables from .env file only
 load_dotenv()
 
-# For Streamlit Cloud, also check streamlit secrets
-if hasattr(st, 'secrets'):
-    for key in ['OPENAI_API_KEY', 'TOGETHER_API_KEY', 'HF_TOKEN']:
-        if key in st.secrets:
-            os.environ[key] = st.secrets[key]
+# Ensure HF_TOKEN is available for transformers/huggingface_hub
+hf_token = os.getenv('HF_TOKEN')
+if hf_token:
+    # Set both possible environment variables that HF libraries check
+    os.environ['HF_TOKEN'] = hf_token
+    os.environ['HUGGING_FACE_HUB_TOKEN'] = hf_token
+    print(f"🔑 HF_TOKEN loaded from .env: {hf_token[:15]}...{hf_token[-15:]} (length: {len(hf_token)})")
+else:
+    print("❌ No HF_TOKEN found in .env file")
+
 
 # Page configuration
 st.set_page_config(
@@ -58,11 +63,38 @@ if "test_results" not in st.session_state:
     st.session_state.test_results = []
 
 def initialize_firewall():
-    """Initialize LlamaFirewall with both scanners"""
-    return LlamaFirewall({
-        Role.USER: [ScannerType.PROMPT_GUARD],
-        Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT],
-    })
+    """Initialize LlamaFirewall with available scanners"""
+
+    # Debug: Check environment variables
+    hf_token = os.getenv('HF_TOKEN')
+    hf_hub_token = os.getenv('HUGGING_FACE_HUB_TOKEN')
+    print(f"🔍 Debug - HF_TOKEN present: {bool(hf_token)}")
+    print(f"🔍 Debug - HUGGING_FACE_HUB_TOKEN present: {bool(hf_hub_token)}")
+    if hf_token:
+        print(f"🔍 Debug - Token preview: {hf_token[:20]}... (full length: {len(hf_token)})")
+
+    try:
+        # Try to initialize with both scanners
+        print("🚀 Attempting to initialize LlamaFirewall with both scanners...")
+        firewall = LlamaFirewall({
+            Role.USER: [ScannerType.PROMPT_GUARD],
+            Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT],
+        })
+        print("✅ LlamaFirewall initialization successful!")
+        st.success("🛡️ Both scanners loaded successfully!")
+        return firewall
+    except Exception as e:
+        print(f"❌ LlamaFirewall initialization failed: {str(e)}")
+        # If PromptGuard fails, fall back to AlignmentCheck only
+        if "401" in str(e) or "Unauthorized" in str(e):
+            st.warning("⚠️ PromptGuard requires access approval from Meta. Running with AlignmentCheck only.")
+            st.info("💡 To enable PromptGuard: Visit https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M and request access.")
+        else:
+            st.error(f"⚠️ PromptGuard error: {str(e)}")
+
+        return LlamaFirewall({
+            Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT],
+        })
 
 def build_trace(purpose: str, messages: List[Dict]) -> Trace:
     """Build LlamaFirewall trace from conversation"""
@@ -92,9 +124,12 @@ def build_trace(purpose: str, messages: List[Dict]) -> Trace:
 def test_prompt_guard(firewall, user_input: str) -> Dict:
     """Test PromptGuard scanner on user input"""
     try:
+        print(f"🔍 Testing PromptGuard with input: {user_input[:50]}...")
         user_message = UserMessage(content=user_input)
+        print("🔍 Created UserMessage, calling firewall.scan()...")
         result = firewall.scan(user_message)
-        
+        print(f"✅ PromptGuard scan successful: {result.decision}")
+
         return {
             "scanner": "PromptGuard",
             "decision": str(result.decision),
@@ -103,6 +138,7 @@ def test_prompt_guard(firewall, user_input: str) -> Dict:
             "is_safe": result.decision == ScanDecision.ALLOW
         }
     except Exception as e:
+        print(f"❌ PromptGuard scan failed: {str(e)}")
         return {"error": str(e), "scanner": "PromptGuard"}
 
 def test_alignment_check(firewall, trace: Trace) -> Dict:
@@ -287,7 +323,7 @@ def main():
                 
                 # Test AlignmentCheck
                 alignment_result = test_alignment_check(firewall, trace)
-                
+
                 # Test PromptGuard on each user message
                 promptguard_results = []
                 for msg in st.session_state.current_conversation["messages"]:
@@ -295,7 +331,7 @@ def main():
                         result = test_prompt_guard(firewall, msg["content"])
                         result["message"] = msg["content"][:50] + "..."
                         promptguard_results.append(result)
-                
+
                 # Store results
                 test_result = {
                     "timestamp": datetime.now().isoformat(),
@@ -343,7 +379,6 @@ def main():
                     gauge={
                         "axis": {"range": [0, 1]},
                         "bar": {"color": "green" if ac_result["score"] > 0.7 else "orange" if ac_result["score"] > 0.3 else "red"},
-                        "thresholdvalue": 0.5,
                         "threshold": {
                             "line": {"color": "red", "width": 4},
                             "thickness": 0.75,
@@ -359,16 +394,19 @@ def main():
                 st.error(f"Error: {ac_result['error']}")
             
             # PromptGuard Results
+            st.subheader("PromptGuard Scanner")
             if latest_result["prompt_guard"]:
-                st.subheader("PromptGuard Scanner")
                 for pg_result in latest_result["prompt_guard"]:
                     if "error" not in pg_result:
                         if pg_result["is_safe"]:
-                            st.success(f"✅ Message safe: {pg_result['message']}")
+                            st.success(f"✅ Safe: {pg_result['message']}")
                         else:
-                            st.warning(f"⚠️ Potential injection: {pg_result['message']}")
+                            st.warning(f"⚠️ Risk detected: {pg_result['message']}")
+                        st.caption(f"Score: {pg_result.get('score', 'N/A')} | Decision: {pg_result.get('decision', 'N/A')}")
                     else:
                         st.error(f"Error: {pg_result['error']}")
+            else:
+                st.info("🔒 No user messages to scan with PromptGuard")
             
             # History chart
             if len(st.session_state.test_results) > 1:
