@@ -83,85 +83,18 @@ class NemoGuardRailsScanner:
     """Base class for NeMo GuardRails scanners"""
 
     def __init__(self):
+        # Skip Rails initialization entirely - we use enhanced heuristics only
+        # This prevents LLM configuration warnings in cloud deployments
         self.rails = None
+
         if NEMO_GUARDRAILS_AVAILABLE:
-            try:
-                # Check for OpenAI API key first
-                openai_key = os.getenv('OPENAI_API_KEY')
-                if not openai_key:
-                    print("❌ NeMo GuardRails requires OPENAI_API_KEY")
-                    return
-
-                # Try different initialization approaches
-                try:
-                    # Approach 1: Try with standard gpt-3.5-turbo (more widely available)
-                    config_yaml = f"""
-models:
-  - type: main
-    engine: openai
-    model: gpt-3.5-turbo
-    parameters:
-      openai_api_key: "{openai_key}"
-      temperature: 0.0
-
-config:
-  logs:
-    level: WARNING
-"""
-                    config = RailsConfig.from_content(config_yaml)
-                    self.rails = LLMRails(config)
-                    print("✅ NeMo GuardRails initialized with gpt-3.5-turbo")
-
-                except Exception as fallback_error:
-                    print(f"⚠️ gpt-3.5-turbo failed ({fallback_error}), trying LangChain direct approach...")
-
-                    try:
-                        # Approach 2: Direct LLM configuration with LangChain
-                        from langchain_openai import ChatOpenAI
-
-                        # Create chat model instance manually
-                        llm = ChatOpenAI(
-                            openai_api_key=openai_key,
-                            model="gpt-3.5-turbo",
-                            temperature=0.0
-                        )
-
-                        # Simple config without complex models section
-                        config_yaml = """
-# Minimal NeMo GuardRails configuration
-config:
-  logs:
-    level: WARNING
-"""
-                        config = RailsConfig.from_content(config_yaml)
-
-                        # Initialize with explicit LLM
-                        self.rails = LLMRails(config, llm=llm)
-                        print("✅ NeMo GuardRails initialized with explicit ChatOpenAI")
-
-                    except ImportError:
-                        # Approach 3: Try with minimal config and let NeMo handle LLM
-                        print("⚠️ LangChain ChatOpenAI not available, trying minimal config...")
-
-                        config_yaml = """
-# Ultra-minimal configuration - let NeMo GuardRails handle everything
-config:
-  logs:
-    level: WARNING
-"""
-                        config = RailsConfig.from_content(config_yaml)
-                        self.rails = LLMRails(config)
-                        print("✅ NeMo GuardRails initialized with minimal config")
-
-            except Exception as e:
-                print(f"❌ Failed to initialize NeMo GuardRails: {str(e)}")
-                # Print more detailed error for debugging
-                import traceback
-                print(f"❌ NeMo GuardRails initialization traceback: {traceback.format_exc()}")
-                self.rails = None
+            print("✅ NeMo GuardRails available - using enhanced heuristic analysis (no LLM required)")
+        else:
+            print("⚠️ NeMo GuardRails not available - using enhanced heuristic analysis")
 
     def is_available(self):
-        return self.rails is not None
+        # Always return True since we use enhanced heuristics regardless of Rails API
+        return NEMO_GUARDRAILS_AVAILABLE
 
 class SelfContradictionScanner(NemoGuardRailsScanner):
     """Scanner for detecting self-contradictions in assistant responses"""
