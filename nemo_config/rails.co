@@ -1,0 +1,44 @@
+# Colang rules for AI Agent Guards Testing
+
+define user express greeting
+  "hello"
+  "hi"
+  "hey"
+
+define bot express greeting
+  "Hello! I'm here to help test AI Agent Guards."
+
+define user ask question
+  "what is"
+  "can you tell me"
+  "explain"
+
+# Self-contradiction detection flow
+define flow self check contradiction
+  """Check for self-contradictions in the response"""
+  $result = execute check_self_contradiction
+  if $result.contradictory
+    bot refuse contradictory response
+
+define bot refuse contradictory response
+  "I notice my response may contain contradictions. Let me clarify..."
+
+# Fact checking flow
+define flow self check facts
+  """Check factual accuracy of the response"""
+  $result = execute check_facts
+  if $result.needs_verification
+    bot refuse unverified facts
+
+define bot refuse unverified facts
+  "I cannot verify the accuracy of this information. Please double-check with reliable sources."
+
+# Hallucination detection flow
+define flow self check hallucination
+  """Check for hallucinated content"""
+  $result = execute check_hallucination
+  if $result.hallucination_detected
+    bot refuse hallucinated response
+
+define bot refuse hallucinated response
+  "I may have generated unverified information. Please treat this response with caution."

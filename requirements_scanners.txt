@@ -1,0 +1,8 @@
+# Scanner-specific requirements
+# Install after minimal requirements
+
+# LlamaFirewall (lighter install)
+llamafirewall
+
+# NeMo GuardRails (heaviest - install last)
+nemoguardrails

@@ -1,0 +1,34 @@
+# NeMo GuardRails Configuration for AI Agent Guards Testing
+models:
+  - type: main
+    engine: openai
+    model: gpt-3.5-turbo
+
+rails:
+  input:
+    flows:
+      # Add input filtering if needed
+
+  output:
+    flows:
+      - self check facts
+      - self check hallucination
+
+# Fact-checking configuration
+fact_checking:
+  parameters:
+    threshold: 0.5
+    evidence_required: true
+
+# Hallucination detection configuration
+hallucination_detection:
+  parameters:
+    threshold: 0.5
+    num_extra_responses: 2
+    consistency_threshold: 0.7
+
+# Self-contradiction detection
+self_contradiction:
+  parameters:
+    threshold: 0.6
+    num_samples: 3

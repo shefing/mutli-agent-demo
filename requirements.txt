@@ -1,12 +1,20 @@
 # AI Agent Guards Testing Application Requirements
 
-# Core LlamaFirewall for scanner functionality
-llamafirewall>=1.0.3
-
-# UI Requirements for Streamlit demo
-streamlit>=1.28.0
-plotly>=5.17.0
-pandas>=2.0.0
+# UI Requirements for Streamlit demo (install first to avoid conflicts)
+streamlit>=1.28.0,<2.0.0
+plotly>=5.17.0,<6.0.0
+pandas>=2.0.0,<3.0.0
 
 # Core utilities
-python-dotenv>=1.0.0
+python-dotenv>=1.0.0,<2.0.0
+
+# Core LlamaFirewall for scanner functionality (with constraints)
+llamafirewall>=1.0.3,<2.0.0
+
+# NeMo GuardRails for fact-checking, self-contradiction, and hallucination detection (with constraints)
+nemoguardrails>=0.16.0,<1.0.0
+
+# Additional constraints to help dependency resolution
+click>=8.0.0,<9.0.0
+protobuf>=5.0.0,<7.0.0
+pydantic>=2.0.0,<3.0.0
