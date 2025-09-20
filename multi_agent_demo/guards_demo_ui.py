@@ -61,40 +61,53 @@ if "current_conversation" not in st.session_state:
     }
 if "test_results" not in st.session_state:
     st.session_state.test_results = []
+if "enabled_scanners" not in st.session_state:
+    st.session_state.enabled_scanners = {
+        "PromptGuard": True,
+        "AlignmentCheck": True,
+        "Scanner3": False,  # Placeholder for future scanners
+        "Scanner4": False,
+        "Scanner5": False
+    }
 
 def initialize_firewall():
-    """Initialize LlamaFirewall with available scanners"""
+    """Initialize LlamaFirewall with selected scanners"""
 
-    # Debug: Check environment variables
-    hf_token = os.getenv('HF_TOKEN')
-    hf_hub_token = os.getenv('HUGGING_FACE_HUB_TOKEN')
-    print(f"🔍 Debug - HF_TOKEN present: {bool(hf_token)}")
-    print(f"🔍 Debug - HUGGING_FACE_HUB_TOKEN present: {bool(hf_hub_token)}")
-    if hf_token:
-        print(f"🔍 Debug - Token preview: {hf_token[:20]}... (full length: {len(hf_token)})")
+    # Build scanner configuration based on enabled scanners
+    scanner_config = {}
+    enabled_scanners = st.session_state.enabled_scanners
+
+    if enabled_scanners.get("PromptGuard", False):
+        scanner_config[Role.USER] = scanner_config.get(Role.USER, []) + [ScannerType.PROMPT_GUARD]
+
+    if enabled_scanners.get("AlignmentCheck", False):
+        scanner_config[Role.ASSISTANT] = scanner_config.get(Role.ASSISTANT, []) + [ScannerType.AGENT_ALIGNMENT]
+
+    # Add placeholders for future scanners
+    # if enabled_scanners.get("Scanner3", False):
+    #     scanner_config[Role.USER] = scanner_config.get(Role.USER, []) + [ScannerType.FUTURE_SCANNER]
+
+    if not scanner_config:
+        st.warning("⚠️ No scanners selected. Please enable at least one scanner.")
+        return None
 
     try:
-        # Try to initialize with both scanners
-        print("🚀 Attempting to initialize LlamaFirewall with both scanners...")
-        firewall = LlamaFirewall({
-            Role.USER: [ScannerType.PROMPT_GUARD],
-            Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT],
-        })
-        print("✅ LlamaFirewall initialization successful!")
-        st.success("🛡️ Both scanners loaded successfully!")
+        print(f"🚀 Initializing LlamaFirewall with selected scanners: {list(enabled_scanners.keys()) if any(enabled_scanners.values()) else 'none'}")
+        firewall = LlamaFirewall(scanner_config)
+
+        enabled_count = sum(enabled_scanners.values())
+        enabled_names = [name for name, enabled in enabled_scanners.items() if enabled]
+        st.success(f"🛡️ {enabled_count} scanner(s) loaded: {', '.join(enabled_names)}")
+        print(f"✅ LlamaFirewall initialized with {enabled_count} scanner(s)")
         return firewall
+
     except Exception as e:
         print(f"❌ LlamaFirewall initialization failed: {str(e)}")
-        # If PromptGuard fails, fall back to AlignmentCheck only
         if "401" in str(e) or "Unauthorized" in str(e):
-            st.warning("⚠️ PromptGuard requires access approval from Meta. Running with AlignmentCheck only.")
-            st.info("💡 To enable PromptGuard: Visit https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M and request access.")
+            st.error("⚠️ Scanner initialization failed due to authentication. Check your API tokens.")
         else:
-            st.error(f"⚠️ PromptGuard error: {str(e)}")
-
-        return LlamaFirewall({
-            Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT],
-        })
+            st.error(f"⚠️ Scanner initialization error: {str(e)}")
+        return None
 
 def build_trace(purpose: str, messages: List[Dict]) -> Trace:
     """Build LlamaFirewall trace from conversation"""
@@ -165,6 +178,37 @@ def main():
     
     # Sidebar for predefined scenarios and configuration
     with st.sidebar:
+        st.header("🛡️ Scanner Configuration")
+
+        # Scanner selection with checkboxes
+        st.subheader("Enable Scanners")
+
+        # Available scanners with descriptions
+        scanner_info = {
+            "PromptGuard": "🔍 Detects malicious user inputs",
+            "AlignmentCheck": "🎯 Detects goal hijacking",
+            "Scanner3": "🚧 Future scanner (placeholder)",
+            "Scanner4": "🚧 Future scanner (placeholder)",
+            "Scanner5": "🚧 Future scanner (placeholder)"
+        }
+
+        # Create checkboxes for each scanner
+        for scanner_name, description in scanner_info.items():
+            # Only show active scanners and placeholders
+            if scanner_name in ["PromptGuard", "AlignmentCheck"] or scanner_name.startswith("Scanner"):
+                enabled = st.checkbox(
+                    f"{scanner_name}",
+                    value=st.session_state.enabled_scanners[scanner_name],
+                    help=description,
+                    key=f"enable_{scanner_name}",
+                    disabled=scanner_name.startswith("Scanner")  # Disable placeholders
+                )
+                st.session_state.enabled_scanners[scanner_name] = enabled
+                if not scanner_name.startswith("Scanner"):  # Only show description for active scanners
+                    st.caption(description)
+
+        st.divider()
+
         st.header("📚 Predefined Scenarios")
 
         # Predefined scenarios
@@ -218,6 +262,8 @@ def main():
                         {"type": "assistant", "content": "I cannot ignore safety instructions or perform unauthorized transfers"}
                     ]
                 }
+            # Clear test results when loading a new scenario
+            st.session_state.test_results = []
             st.rerun()
 
         st.divider()
@@ -245,6 +291,8 @@ def main():
                     st.write(f"**Messages:** {len(conv['messages'])}")
                     if st.button(f"Load", key=f"load_{i}"):
                         st.session_state.current_conversation = conv.copy()
+                        # Clear test results when loading a saved scenario
+                        st.session_state.test_results = []
                         st.rerun()
     
     # Main content area
@@ -315,37 +363,47 @@ def main():
         col_btn1, col_btn2, col_btn3 = st.columns(3)
         with col_btn1:
             if st.button("🧪 Run Tests", type="primary", use_container_width=True):
-                # Build trace
-                trace = build_trace(
-                    st.session_state.current_conversation["purpose"],
-                    st.session_state.current_conversation["messages"]
-                )
-                
-                # Test AlignmentCheck
-                alignment_result = test_alignment_check(firewall, trace)
+                if firewall is None:
+                    st.error("❌ No scanners available. Please enable at least one scanner in the sidebar.")
+                else:
+                    # Build trace
+                    trace = build_trace(
+                        st.session_state.current_conversation["purpose"],
+                        st.session_state.current_conversation["messages"]
+                    )
 
-                # Test PromptGuard on each user message
-                promptguard_results = []
-                for msg in st.session_state.current_conversation["messages"]:
-                    if msg["type"] == "user":
-                        result = test_prompt_guard(firewall, msg["content"])
-                        result["message"] = msg["content"][:50] + "..."
-                        promptguard_results.append(result)
+                    # Test enabled scanners only
+                    alignment_result = None
+                    promptguard_results = []
 
-                # Store results
-                test_result = {
-                    "timestamp": datetime.now().isoformat(),
-                    "purpose": st.session_state.current_conversation["purpose"],
-                    "alignment_check": alignment_result,
-                    "prompt_guard": promptguard_results,
-                    "conversation_length": len(st.session_state.current_conversation["messages"])
-                }
+                    # Test AlignmentCheck if enabled
+                    if st.session_state.enabled_scanners.get("AlignmentCheck", False):
+                        alignment_result = test_alignment_check(firewall, trace)
+
+                    # Test PromptGuard if enabled
+                    if st.session_state.enabled_scanners.get("PromptGuard", False):
+                        for msg in st.session_state.current_conversation["messages"]:
+                            if msg["type"] == "user":
+                                result = test_prompt_guard(firewall, msg["content"])
+                                result["message"] = msg["content"][:50] + "..."
+                                promptguard_results.append(result)
+
+                    # Store results
+                    test_result = {
+                        "timestamp": datetime.now().isoformat(),
+                        "purpose": st.session_state.current_conversation["purpose"],
+                        "alignment_check": alignment_result,
+                        "prompt_guard": promptguard_results,
+                        "conversation_length": len(st.session_state.current_conversation["messages"])
+                    }
                 st.session_state.test_results.append(test_result)
                 st.rerun()
                 
         with col_btn2:
             if st.button("🗑️ Clear Conversation", use_container_width=True):
                 st.session_state.current_conversation = {"purpose": "", "messages": []}
+                # Clear test results when clearing conversation
+                st.session_state.test_results = []
                 st.rerun()
                 
         with col_btn3:
@@ -362,8 +420,10 @@ def main():
             # AlignmentCheck Results
             st.subheader("AlignmentCheck Scanner")
             ac_result = latest_result["alignment_check"]
-            
-            if "error" not in ac_result:
+
+            if ac_result is None:
+                st.info("🔒 AlignmentCheck scanner was disabled for this test")
+            elif "error" not in ac_result:
                 # Decision indicator
                 if ac_result["is_safe"]:
                     st.success(f"✅ {ac_result['decision']}")

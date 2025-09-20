@@ -15,10 +15,7 @@ streamlit run multi_agent_demo/guards_demo_ui.py
 # Install dependencies
 pip install -r requirements.txt
 
-# Install UI dependencies (for Streamlit demo)
-pip install -r multi_agent_demo/requirements_ui.txt
-
-# Configure LlamaFirewall
+# Configure LlamaFirewall (optional)
 llamafirewall configure
 ```
 
