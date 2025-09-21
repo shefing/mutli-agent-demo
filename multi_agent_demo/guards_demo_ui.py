@@ -145,6 +145,9 @@ if "input_thought" not in st.session_state:
     st.session_state.input_thought = ""
 if "input_params" not in st.session_state:
     st.session_state.input_params = ""
+# Initialize editing state
+if "editing_message_index" not in st.session_state:
+    st.session_state.editing_message_index = None
 
 class NemoGuardRailsScanner:
     """Base class for NeMo GuardRails scanners"""
@@ -905,83 +908,150 @@ def main():
             st.session_state.test_results = []
             st.rerun()
 
-        st.divider()
-
-        st.header("🎯 Agent Configuration")
-
-        # Agent purpose
-        purpose = st.text_area(
-            "Agent Intended Purpose",
-            value=st.session_state.current_conversation["purpose"],
-            help="Define what the agent is supposed to do",
-            placeholder="e.g., Check account balance and show transactions",
-            height=80
-        )
-        st.session_state.current_conversation["purpose"] = purpose
-
-        # Saved Scenarios in sidebar
-        if st.session_state.conversations:
-            st.divider()
-            st.header("💾 Saved Scenarios")
-
-            for scenario_name, scenario_data in st.session_state.conversations.items():
-                with st.expander(f"📋 {scenario_name}"):
-                    st.write(f"**Purpose:** {scenario_data['purpose'][:40]}...")
-                    st.write(f"**Messages:** {len(scenario_data['messages'])}")
-                    if 'created_at' in scenario_data:
-                        created = datetime.fromisoformat(scenario_data['created_at']).strftime("%Y-%m-%d %H:%M")
-                        st.caption(f"Created: {created}")
-
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("📥 Load", key=f"load_{scenario_name}"):
-                            st.session_state.current_conversation = {
-                                "purpose": scenario_data["purpose"],
-                                "messages": scenario_data["messages"]
-                            }
-                            # Clear test results when loading a saved scenario
-                            st.session_state.test_results = []
-                            st.rerun()
-                    with col2:
-                        if st.button("🗑️ Delete", key=f"delete_{scenario_name}"):
-                            if delete_scenario(scenario_name):
-                                # Update session state
-                                st.session_state.conversations = load_saved_scenarios()
-                                st.success(f"Deleted scenario '{scenario_name}'")
-                                st.rerun()
-                            else:
-                                st.error(f"Failed to delete scenario '{scenario_name}'")
     
     # Main content area
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.header("💬 Conversation Builder")
+        # Agent Configuration
+        st.subheader("🎯 Agent Purpose")
+        purpose = st.text_area(
+            "Agent Intended Purpose",
+            value=st.session_state.current_conversation["purpose"],
+            help="Define what the agent is supposed to do",
+            placeholder="e.g., Check account balance and show transactions",
+            height=60
+        )
+        st.session_state.current_conversation["purpose"] = purpose
+
+        st.divider()
+        st.subheader("💬 Conversation Builder")
         
         # Display current conversation
         for i, msg in enumerate(st.session_state.current_conversation["messages"]):
-            if msg["type"] == "user":
-                with st.chat_message("user"):
-                    st.write(msg["content"])
-            else:
-                with st.chat_message("assistant"):
-                    if msg.get("action"):
-                        st.write(f"**Action:** `{msg['action']}`")
-                        st.write(f"**Thought:** {msg['content']}")
-                        if msg.get("action_input"):
-                            st.json(msg["action_input"])
+            if st.session_state.editing_message_index == i:
+                # Editing mode for this message
+                with st.container():
+                    if msg["type"] == "user":
+                        edited_content = st.text_area(
+                            "Edit user message:",
+                            value=msg["content"],
+                            height=80,
+                            key=f"edit_user_{i}"
+                        )
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("✓ Update", key=f"update_{i}"):
+                                st.session_state.current_conversation["messages"][i]["content"] = edited_content
+                                st.session_state.editing_message_index = None
+                                st.rerun()
+                        with col2:
+                            if st.button("❌ Cancel", key=f"cancel_{i}"):
+                                st.session_state.editing_message_index = None
+                                st.rerun()
                     else:
-                        st.write(msg["content"])
+                        if msg.get("action"):
+                            # Editing assistant action
+                            edited_action = st.text_input(
+                                "Edit action name:",
+                                value=msg.get("action", ""),
+                                key=f"edit_action_{i}"
+                            )
+                            edited_content = st.text_area(
+                                "Edit thought:",
+                                value=msg["content"],
+                                height=60,
+                                key=f"edit_thought_{i}"
+                            )
+                            edited_params = st.text_area(
+                                "Edit parameters (JSON):",
+                                value=json.dumps(msg.get("action_input", {}), indent=2),
+                                height=60,
+                                key=f"edit_params_{i}"
+                            )
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("✓ Update", key=f"update_{i}"):
+                                    try:
+                                        action_input = json.loads(edited_params) if edited_params else {}
+                                        st.session_state.current_conversation["messages"][i].update({
+                                            "content": edited_content,
+                                            "action": edited_action,
+                                            "action_input": action_input
+                                        })
+                                        st.session_state.editing_message_index = None
+                                        st.rerun()
+                                    except json.JSONDecodeError:
+                                        st.error("Invalid JSON in parameters")
+                            with col2:
+                                if st.button("❌ Cancel", key=f"cancel_{i}"):
+                                    st.session_state.editing_message_index = None
+                                    st.rerun()
+                        else:
+                            # Editing regular assistant response
+                            edited_content = st.text_area(
+                                "Edit assistant response:",
+                                value=msg["content"],
+                                height=80,
+                                key=f"edit_assistant_{i}"
+                            )
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("✓ Update", key=f"update_{i}"):
+                                    st.session_state.current_conversation["messages"][i]["content"] = edited_content
+                                    st.session_state.editing_message_index = None
+                                    st.rerun()
+                            with col2:
+                                if st.button("❌ Cancel", key=f"cancel_{i}"):
+                                    st.session_state.editing_message_index = None
+                                    st.rerun()
+            else:
+                # Normal display mode with edit/delete buttons
+                if msg["type"] == "user":
+                    with st.chat_message("user"):
+                        col_msg, col_btns = st.columns([4, 1])
+                        with col_msg:
+                            st.write(msg["content"])
+                        with col_btns:
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                if st.button("✏️", key=f"edit_btn_{i}", help="Edit message"):
+                                    st.session_state.editing_message_index = i
+                                    st.rerun()
+                            with btn_col2:
+                                if st.button("🗑️", key=f"delete_btn_{i}", help="Delete message"):
+                                    del st.session_state.current_conversation["messages"][i]
+                                    st.rerun()
+                else:
+                    with st.chat_message("assistant"):
+                        col_msg, col_btns = st.columns([4, 1])
+                        with col_msg:
+                            if msg.get("action"):
+                                st.write(f"**Action:** `{msg['action']}`")
+                                st.write(f"**Thought:** {msg['content']}")
+                                if msg.get("action_input"):
+                                    st.json(msg["action_input"])
+                            else:
+                                st.write(msg["content"])
+                        with col_btns:
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                if st.button("✏️", key=f"edit_btn_{i}", help="Edit message"):
+                                    st.session_state.editing_message_index = i
+                                    st.rerun()
+                            with btn_col2:
+                                if st.button("🗑️", key=f"delete_btn_{i}", help="Delete message"):
+                                    del st.session_state.current_conversation["messages"][i]
+                                    st.rerun()
         
         # Add new message
-        st.divider()
         message_type = st.radio("Add message", ["User", "Assistant", "Assistant Action"], horizontal=True)
         
         if message_type == "User":
             user_content = st.text_area(
                 "User message",
                 value=st.session_state.input_user_content,
-                height=100,
+                height=80,
                 placeholder="Enter user message... (supports multi-line text)",
                 help="Type the user's message. The text area will expand as you type.",
                 key="user_message_input"
@@ -1002,7 +1072,7 @@ def main():
             assistant_content = st.text_area(
                 "Assistant response",
                 value=st.session_state.input_assistant_content,
-                height=100,
+                height=80,
                 placeholder="Enter assistant response... (supports multi-line text)",
                 help="Type the assistant's response. The text area will expand as you type.",
                 key="assistant_message_input"
@@ -1034,7 +1104,7 @@ def main():
                 thought = st.text_area(
                     "Thought",
                     value=st.session_state.input_thought,
-                    height=80,
+                    height=60,
                     placeholder="What the assistant is thinking...",
                     help="Describe the assistant's reasoning for this action",
                     key="thought_input"
@@ -1046,7 +1116,7 @@ def main():
                 params = st.text_area(
                     "Parameters (JSON)",
                     value=st.session_state.input_params,
-                    height=80,
+                    height=60,
                     placeholder='{"to": "account", "amount": 100}',
                     help="JSON parameters for the action",
                     key="params_input"
@@ -1072,7 +1142,7 @@ def main():
                     st.error("Invalid JSON in parameters")
         
         # Control buttons
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
         with col_btn1:
             if st.button("🧪 Run Tests", type="primary", use_container_width=True):
                 if firewall is None:
@@ -1124,57 +1194,106 @@ def main():
                     }
                 st.session_state.test_results.append(test_result)
                 st.rerun()
-                
+
         with col_btn2:
             if st.button("🗑️ Clear Conversation", use_container_width=True):
                 st.session_state.current_conversation = {"purpose": "", "messages": []}
                 # Clear test results when clearing conversation
                 st.session_state.test_results = []
                 st.rerun()
-                
+
         with col_btn3:
-            # Save Scenario with naming
-            with st.popover("💾 Save Scenario", use_container_width=True):
-                scenario_name = st.text_input(
-                    "Scenario Name",
-                    value="",
-                    placeholder="Enter a name for this scenario...",
-                    help="Give your scenario a descriptive name"
+            # Export current scenario
+            with st.popover("📤 Export Scenario", use_container_width=True):
+                if st.session_state.current_conversation["messages"]:
+                    export_data = {
+                        "scenario_name": "Exported Scenario",
+                        "agent_purpose": st.session_state.current_conversation["purpose"],
+                        "messages": st.session_state.current_conversation["messages"],
+                        "exported_at": datetime.now().isoformat(),
+                        "format_version": "1.0"
+                    }
+
+                    export_json = json.dumps(export_data, indent=2, ensure_ascii=False)
+
+                    st.download_button(
+                        label="📥 Download JSON",
+                        data=export_json,
+                        file_name=f"ai_guards_scenario_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+
+                    st.text_area(
+                        "Copy this JSON (shareable via email/Slack):",
+                        value=export_json,
+                        height=150,
+                        help="Copy this text and share it with others"
+                    )
+                else:
+                    st.info("💡 Create a conversation first to export it")
+
+        with col_btn4:
+            # Import scenario
+            with st.popover("📥 Import Scenario", use_container_width=True):
+                import_method = st.radio(
+                    "Import Method:",
+                    ["Paste JSON", "Upload File"],
+                    horizontal=True
                 )
 
-                existing_scenario = get_scenario(scenario_name) if scenario_name else None
+                imported_data = None
 
-                if scenario_name:
-                    if existing_scenario:
-                        st.warning(f"⚠️ Scenario '{scenario_name}' already exists!")
-                        st.write("**Existing scenario:**")
-                        st.write(f"Purpose: {existing_scenario['purpose'][:50]}...")
-                        st.write(f"Messages: {len(existing_scenario['messages'])}")
-                        if 'created_at' in existing_scenario:
-                            created = datetime.fromisoformat(existing_scenario['created_at']).strftime("%Y-%m-%d %H:%M")
-                            st.write(f"Created: {created}")
+                if import_method == "Paste JSON":
+                    json_input = st.text_area(
+                        "Paste scenario JSON here:",
+                        height=150,
+                        placeholder="Paste the exported scenario JSON..."
+                    )
 
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("🔄 Overwrite", use_container_width=True):
-                                if save_scenario(scenario_name, st.session_state.current_conversation):
-                                    st.session_state.conversations = load_saved_scenarios()
-                                    st.success(f"✅ Scenario '{scenario_name}' updated!")
-                                    st.rerun()
-                        with col2:
-                            st.button("❌ Cancel", use_container_width=True)
+                    if json_input.strip():
+                        try:
+                            imported_data = json.loads(json_input)
+                            st.success("✓ Valid JSON format")
+                        except json.JSONDecodeError as e:
+                            st.error(f"❌ Invalid JSON: {str(e)}")
+
+                else:  # Upload File
+                    uploaded_file = st.file_uploader(
+                        "Choose scenario file",
+                        type=['json'],
+                        help="Upload a .json file exported from AI Guards Testing"
+                    )
+
+                    if uploaded_file is not None:
+                        try:
+                            imported_data = json.load(uploaded_file)
+                            st.success("✓ File loaded successfully")
+                        except json.JSONDecodeError as e:
+                            st.error(f"❌ Invalid JSON file: {str(e)}")
+
+                if imported_data:
+                    # Validate the imported data
+                    required_fields = ['agent_purpose', 'messages']
+                    if all(field in imported_data for field in required_fields):
+                        st.write("**Preview:**")
+                        st.write(f"Purpose: {imported_data['agent_purpose'][:100]}...")
+                        st.write(f"Messages: {len(imported_data['messages'])}")
+
+                        if st.button("✓ Import Scenario", type="primary", use_container_width=True):
+                            # Load the scenario into current conversation
+                            st.session_state.current_conversation = {
+                                "purpose": imported_data['agent_purpose'],
+                                "messages": imported_data['messages']
+                            }
+                            # Clear any existing test results
+                            st.session_state.test_results = []
+                            st.success("✓ Scenario imported successfully!")
+                            st.rerun()
                     else:
-                        if st.button("💾 Save New Scenario", use_container_width=True):
-                            if save_scenario(scenario_name, st.session_state.current_conversation):
-                                st.session_state.conversations = load_saved_scenarios()
-                                st.success(f"✅ Scenario '{scenario_name}' saved!")
-                                st.rerun()
-                else:
-                    st.info("💡 Enter a name to save this scenario")
+                        st.error("❌ Invalid scenario format. Missing required fields: agent_purpose, messages")
     
     with col2:
-        st.header("🔍 Test Results")
-        
         if st.session_state.test_results:
             latest_result = st.session_state.test_results[-1]
             
@@ -1195,20 +1314,18 @@ def main():
                 fig_gauge = go.Figure(go.Indicator(
                     mode="gauge+number",
                     value=ac_result["score"],
-                    title={"text": "Alignment Score"},
+                    number={"font": {"size": 24}},
                     domain={"x": [0, 1], "y": [0, 1]},
                     gauge={
-                        "axis": {"range": [0, 1]},
-                        "bar": {"color": "green" if ac_result["score"] > 0.7 else "orange" if ac_result["score"] > 0.3 else "red"},
-                        "threshold": {
-                            "line": {"color": "red", "width": 4},
-                            "thickness": 0.75,
-                            "value": 0.5
-                        }
+                        "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkblue"},
+                        "bar": {"color": "green" if ac_result["score"] > 0.7 else "orange" if ac_result["score"] > 0.3 else "red", "thickness": 0.8},
+                        "bgcolor": "white",
+                        "borderwidth": 2,
+                        "bordercolor": "gray"
                     }
                 ))
-                fig_gauge.update_layout(height=200)
-                st.plotly_chart(fig_gauge, use_container_width=True)
+                fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
+                st.plotly_chart(fig_gauge, use_container_width=True, key="alignment_check_gauge")
                 
                 st.info(f"**Reason:** {ac_result['reason']}")
             else:
@@ -1245,20 +1362,18 @@ def main():
                         fig_gauge = go.Figure(go.Indicator(
                             mode="gauge+number",
                             value=result["score"],
-                            title={"text": f"{scanner_name} Score"},
+                            number={"font": {"size": 24}},
                             domain={"x": [0, 1], "y": [0, 1]},
                             gauge={
-                                "axis": {"range": [0, 1]},
-                                "bar": {"color": "green" if result["score"] > 0.7 else "orange" if result["score"] > 0.3 else "red"},
-                                "threshold": {
-                                    "line": {"color": "red", "width": 4},
-                                    "thickness": 0.75,
-                                    "value": 0.5
-                                }
+                                "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkblue"},
+                                "bar": {"color": "green" if result["score"] > 0.7 else "orange" if result["score"] > 0.3 else "red", "thickness": 0.8},
+                                "bgcolor": "white",
+                                "borderwidth": 2,
+                                "bordercolor": "gray"
                             }
                         ))
-                        fig_gauge.update_layout(height=200)
-                        st.plotly_chart(fig_gauge, use_container_width=True)
+                        fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
+                        st.plotly_chart(fig_gauge, use_container_width=True, key=f"{scanner_name.lower()}_gauge")
 
                         st.info(f"**Analysis:** {result['reason']}")
                     else:
@@ -1287,8 +1402,6 @@ def main():
                     fig_line.add_hline(y=0.5, line_dash="dash", line_color="red", 
                                       annotation_text="Threshold")
                     st.plotly_chart(fig_line, use_container_width=True)
-        else:
-            st.info("Run a test to see results")
     
 
 if __name__ == "__main__":
