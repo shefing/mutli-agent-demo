@@ -42,6 +42,61 @@ except ImportError:
 # Load environment variables from .env file only
 load_dotenv()
 
+# Persistent Scenario Storage System
+SCENARIOS_DIR = "saved_scenarios"
+SCENARIOS_FILE = os.path.join(SCENARIOS_DIR, "scenarios.json")
+
+def ensure_scenarios_dir():
+    """Ensure the scenarios directory exists"""
+    if not os.path.exists(SCENARIOS_DIR):
+        os.makedirs(SCENARIOS_DIR)
+
+def load_saved_scenarios() -> Dict[str, Dict]:
+    """Load all saved scenarios from file"""
+    ensure_scenarios_dir()
+    if os.path.exists(SCENARIOS_FILE):
+        try:
+            with open(SCENARIOS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading saved scenarios: {e}")
+            return {}
+    return {}
+
+def save_scenarios_to_file(scenarios: Dict[str, Dict]):
+    """Save all scenarios to file"""
+    ensure_scenarios_dir()
+    try:
+        with open(SCENARIOS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(scenarios, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        print(f"Error saving scenarios: {e}")
+
+def save_scenario(name: str, scenario_data: Dict) -> bool:
+    """Save a single scenario with given name"""
+    scenarios = load_saved_scenarios()
+    scenarios[name] = {
+        **scenario_data,
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat()
+    }
+    save_scenarios_to_file(scenarios)
+    return True
+
+def delete_scenario(name: str) -> bool:
+    """Delete a scenario by name"""
+    scenarios = load_saved_scenarios()
+    if name in scenarios:
+        del scenarios[name]
+        save_scenarios_to_file(scenarios)
+        return True
+    return False
+
+def get_scenario(name: str) -> Optional[Dict]:
+    """Get a specific scenario by name"""
+    scenarios = load_saved_scenarios()
+    return scenarios.get(name)
+
 # Ensure HF_TOKEN is available for transformers/huggingface_hub
 hf_token = os.getenv('HF_TOKEN')
 if hf_token:
@@ -62,7 +117,8 @@ st.set_page_config(
 
 # Initialize session state
 if "conversations" not in st.session_state:
-    st.session_state.conversations = []
+    # Load saved scenarios from persistent storage
+    st.session_state.conversations = load_saved_scenarios()
 if "current_conversation" not in st.session_state:
     st.session_state.current_conversation = {
         "purpose": "",
@@ -78,6 +134,17 @@ if "enabled_scanners" not in st.session_state:
         "FactChecker": NEMO_GUARDRAILS_AVAILABLE,
         "HallucinationDetector": NEMO_GUARDRAILS_AVAILABLE
     }
+# Initialize input field state for clearing after adding messages
+if "input_user_content" not in st.session_state:
+    st.session_state.input_user_content = ""
+if "input_assistant_content" not in st.session_state:
+    st.session_state.input_assistant_content = ""
+if "input_action_name" not in st.session_state:
+    st.session_state.input_action_name = ""
+if "input_thought" not in st.session_state:
+    st.session_state.input_thought = ""
+if "input_params" not in st.session_state:
+    st.session_state.input_params = ""
 
 class NemoGuardRailsScanner:
     """Base class for NeMo GuardRails scanners"""
@@ -621,6 +688,7 @@ def initialize_firewall():
             st.error(f"⚠️ LlamaFirewall initialization error: {str(e)}")
         return None
 
+
 def build_trace(purpose: str, messages: List[Dict]) -> Trace:
     """Build LlamaFirewall trace from conversation"""
     trace = []
@@ -856,15 +924,33 @@ def main():
             st.divider()
             st.header("💾 Saved Scenarios")
 
-            for i, conv in enumerate(st.session_state.conversations):
-                with st.expander(f"Scenario {i+1}"):
-                    st.write(f"**Purpose:** {conv['purpose'][:30]}...")
-                    st.write(f"**Messages:** {len(conv['messages'])}")
-                    if st.button(f"Load", key=f"load_{i}"):
-                        st.session_state.current_conversation = conv.copy()
-                        # Clear test results when loading a saved scenario
-                        st.session_state.test_results = []
-                        st.rerun()
+            for scenario_name, scenario_data in st.session_state.conversations.items():
+                with st.expander(f"📋 {scenario_name}"):
+                    st.write(f"**Purpose:** {scenario_data['purpose'][:40]}...")
+                    st.write(f"**Messages:** {len(scenario_data['messages'])}")
+                    if 'created_at' in scenario_data:
+                        created = datetime.fromisoformat(scenario_data['created_at']).strftime("%Y-%m-%d %H:%M")
+                        st.caption(f"Created: {created}")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("📥 Load", key=f"load_{scenario_name}"):
+                            st.session_state.current_conversation = {
+                                "purpose": scenario_data["purpose"],
+                                "messages": scenario_data["messages"]
+                            }
+                            # Clear test results when loading a saved scenario
+                            st.session_state.test_results = []
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️ Delete", key=f"delete_{scenario_name}"):
+                            if delete_scenario(scenario_name):
+                                # Update session state
+                                st.session_state.conversations = load_saved_scenarios()
+                                st.success(f"Deleted scenario '{scenario_name}'")
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to delete scenario '{scenario_name}'")
     
     # Main content area
     col1, col2 = st.columns([3, 2])
@@ -892,30 +978,81 @@ def main():
         message_type = st.radio("Add message", ["User", "Assistant", "Assistant Action"], horizontal=True)
         
         if message_type == "User":
-            user_content = st.text_input("User message")
+            user_content = st.text_area(
+                "User message",
+                value=st.session_state.input_user_content,
+                height=100,
+                placeholder="Enter user message... (supports multi-line text)",
+                help="Type the user's message. The text area will expand as you type.",
+                key="user_message_input"
+            )
+            # Update session state when input changes
+            st.session_state.input_user_content = user_content
+
             if st.button("Add User Message") and user_content:
                 st.session_state.current_conversation["messages"].append({
                     "type": "user",
                     "content": user_content
                 })
+                # Clear the input field
+                st.session_state.input_user_content = ""
                 st.rerun()
-                
+
         elif message_type == "Assistant":
-            assistant_content = st.text_input("Assistant response")
+            assistant_content = st.text_area(
+                "Assistant response",
+                value=st.session_state.input_assistant_content,
+                height=100,
+                placeholder="Enter assistant response... (supports multi-line text)",
+                help="Type the assistant's response. The text area will expand as you type.",
+                key="assistant_message_input"
+            )
+            # Update session state when input changes
+            st.session_state.input_assistant_content = assistant_content
+
             if st.button("Add Assistant Response") and assistant_content:
                 st.session_state.current_conversation["messages"].append({
                     "type": "assistant",
                     "content": assistant_content
                 })
+                # Clear the input field
+                st.session_state.input_assistant_content = ""
                 st.rerun()
                 
         else:  # Assistant Action
             col_a, col_b = st.columns(2)
             with col_a:
-                action_name = st.text_input("Action name", placeholder="e.g., transfer_funds")
-                thought = st.text_input("Thought", placeholder="What the assistant is thinking")
+                action_name = st.text_input(
+                    "Action name",
+                    value=st.session_state.input_action_name,
+                    placeholder="e.g., transfer_funds",
+                    key="action_name_input"
+                )
+                # Update session state
+                st.session_state.input_action_name = action_name
+
+                thought = st.text_area(
+                    "Thought",
+                    value=st.session_state.input_thought,
+                    height=80,
+                    placeholder="What the assistant is thinking...",
+                    help="Describe the assistant's reasoning for this action",
+                    key="thought_input"
+                )
+                # Update session state
+                st.session_state.input_thought = thought
+
             with col_b:
-                params = st.text_area("Parameters (JSON)", placeholder='{"to": "account", "amount": 100}')
+                params = st.text_area(
+                    "Parameters (JSON)",
+                    value=st.session_state.input_params,
+                    height=80,
+                    placeholder='{"to": "account", "amount": 100}',
+                    help="JSON parameters for the action",
+                    key="params_input"
+                )
+                # Update session state
+                st.session_state.input_params = params
             
             if st.button("Add Assistant Action") and action_name and thought:
                 try:
@@ -926,6 +1063,10 @@ def main():
                         "action": action_name,
                         "action_input": action_input
                     })
+                    # Clear all action input fields
+                    st.session_state.input_action_name = ""
+                    st.session_state.input_thought = ""
+                    st.session_state.input_params = ""
                     st.rerun()
                 except json.JSONDecodeError:
                     st.error("Invalid JSON in parameters")
@@ -992,9 +1133,44 @@ def main():
                 st.rerun()
                 
         with col_btn3:
-            if st.button("💾 Save Scenario", use_container_width=True):
-                st.session_state.conversations.append(st.session_state.current_conversation.copy())
-                st.success("Scenario saved!")
+            # Save Scenario with naming
+            with st.popover("💾 Save Scenario", use_container_width=True):
+                scenario_name = st.text_input(
+                    "Scenario Name",
+                    value="",
+                    placeholder="Enter a name for this scenario...",
+                    help="Give your scenario a descriptive name"
+                )
+
+                existing_scenario = get_scenario(scenario_name) if scenario_name else None
+
+                if scenario_name:
+                    if existing_scenario:
+                        st.warning(f"⚠️ Scenario '{scenario_name}' already exists!")
+                        st.write("**Existing scenario:**")
+                        st.write(f"Purpose: {existing_scenario['purpose'][:50]}...")
+                        st.write(f"Messages: {len(existing_scenario['messages'])}")
+                        if 'created_at' in existing_scenario:
+                            created = datetime.fromisoformat(existing_scenario['created_at']).strftime("%Y-%m-%d %H:%M")
+                            st.write(f"Created: {created}")
+
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("🔄 Overwrite", use_container_width=True):
+                                if save_scenario(scenario_name, st.session_state.current_conversation):
+                                    st.session_state.conversations = load_saved_scenarios()
+                                    st.success(f"✅ Scenario '{scenario_name}' updated!")
+                                    st.rerun()
+                        with col2:
+                            st.button("❌ Cancel", use_container_width=True)
+                    else:
+                        if st.button("💾 Save New Scenario", use_container_width=True):
+                            if save_scenario(scenario_name, st.session_state.current_conversation):
+                                st.session_state.conversations = load_saved_scenarios()
+                                st.success(f"✅ Scenario '{scenario_name}' saved!")
+                                st.rerun()
+                else:
+                    st.info("💡 Enter a name to save this scenario")
     
     with col2:
         st.header("🔍 Test Results")
