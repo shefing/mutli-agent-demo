@@ -2,23 +2,34 @@
 models:
   - type: main
     engine: openai
-    model: gpt-3.5-turbo
+    model: gpt-4o-mini
+  - type: fallback
+    engine: openai
+    model: gpt-3.5-turbo-instruct
+
+prompts:
+  - task: self_check_facts
+    content: |
+      Check if the following response contains false or fabricated information:
+
+      {{ bot_response }}
+
+      Answer with "yes" if it contains false/fabricated claims, "no" if it's accurate.
 
 rails:
-  input:
-    flows:
-      # Add input filtering if needed
-
   output:
     flows:
       - self check facts
-      - self check hallucination
 
-# Fact-checking configuration
+# Enhanced fact-checking configuration
 fact_checking:
   parameters:
-    threshold: 0.5
+    threshold: 0.6
     evidence_required: true
+    confidence_threshold: 0.7
+    max_claims_per_response: 5
+    verification_sources: ["academic", "government", "verified_media"]
+    claim_types: ["quantitative", "historical", "scientific", "medical", "geographic"]
 
 # Hallucination detection configuration
 hallucination_detection:
