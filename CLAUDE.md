@@ -47,14 +47,12 @@ The application is organized into specialized modules for maintainability:
   - `conversation_builder.py`: Conversation creation/editing
   - `results_display.py`: Test results visualization
 
-### Security Scanners
-- **LlamaFirewall Integration**:
-  - PromptGuard Scanner: Pre-execution input validation to detect malicious prompts
-  - AlignmentCheck Scanner: Runtime behavioral monitoring to detect goal hijacking
-- **NeMo GuardRails Integration** (NVIDIA's advanced content safety toolkit):
-  - SelfContradiction Scanner: Detects response inconsistencies and contradictions
-  - FactChecker Scanner: Verifies factual accuracy of AI responses
-  - HallucinationDetector Scanner: Identifies hallucinated or ungrounded content
+### Security Scanners (3 Core Scanners)
+- **LlamaFirewall Integration** (2 scanners):
+  - **PromptGuard Scanner**: Pre-execution input validation to detect malicious prompts and prompt injections
+  - **AlignmentCheck Scanner**: Runtime behavioral monitoring to detect goal hijacking and behavioral drift
+- **NeMo GuardRails Integration** (1 scanner - NVIDIA's AI-powered content safety):
+  - **FactChecker Scanner**: AI-powered fact verification using GPT-4o-mini to detect false claims and fabricated information
 
 ## Environment Configuration
 Required environment variables in `.env`:
@@ -74,12 +72,10 @@ streamlit run multi_agent_demo/guards_demo_ui.py
 
 **Features:**
 - **Conversation Builder**: Create custom agent conversations with user messages, assistant responses, and actions
-- **Multi-Scanner Testing**: Test up to 5 different security scanners simultaneously:
+- **Multi-Scanner Testing**: Test 3 core security scanners:
   - **PromptGuard**: Detects malicious user inputs and prompt injections
   - **AlignmentCheck**: Identifies goal hijacking and behavioral drift
-  - **SelfContradiction**: Catches response inconsistencies and contradictions
-  - **FactChecker**: Verifies factual accuracy of AI statements
-  - **HallucinationDetector**: Identifies ungrounded or fabricated content
+  - **FactChecker**: AI-powered fact verification (uses NeMo GuardRails + GPT-4o-mini)
 - **Dynamic Scanner Selection**: Enable/disable scanners via sidebar checkboxes
 - **Visual Feedback**: Real-time score visualization with gauges, metrics, and decision indicators
 - **Predefined Scenarios**: Load example scenarios for different attack types:
@@ -87,6 +83,7 @@ streamlit run multi_agent_demo/guards_demo_ui.py
   - Goal Hijacking: Attempts to redirect agent from intended purpose
   - Data Exfiltration: Attempts to extract sensitive information
   - Prompt Injection: Direct attempts to override agent instructions
+  - Fact-Checking Test: Tests detection of false claims and fabricated statistics
 - **Compact Layout**: Efficient use of screen space with sidebar scenarios and compact conversation display
 - **Rich Results Display**: Expandable sections for each scanner with confidence scores and detailed analysis
 - **Test History**: Track scanner performance over multiple tests with trend visualization
@@ -99,9 +96,9 @@ streamlit run multi_agent_demo/guards_demo_ui.py
 
 **Purpose:**
 This tool helps understand:
-- How different security scanners detect various attack patterns and content issues
-- What conversation patterns trigger security violations across multiple dimensions
+- How different security scanners detect various attack patterns
+- What conversation patterns trigger security violations
 - How to design legitimate agent behaviors that maintain security alignment
 - Performance characteristics of different AI security approaches
-- Detection capabilities for prompt injections, goal hijacking, contradictions, false information, and hallucinations
-- Real-world AI safety challenges including factual accuracy and response consistency
+- Detection capabilities for prompt injections, goal hijacking, and false information
+- Real-world AI safety challenges including factual accuracy verification
