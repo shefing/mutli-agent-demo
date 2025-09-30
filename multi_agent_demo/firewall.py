@@ -18,9 +18,7 @@ from llamafirewall import (
 )
 
 from multi_agent_demo.scanners import (
-    SelfContradictionScanner,
     FactCheckerScanner,
-    HallucinationDetectorScanner,
     NEMO_GUARDRAILS_AVAILABLE
 )
 
@@ -84,9 +82,7 @@ def initialize_nemo_scanners():
     scanners = {}
     if NEMO_GUARDRAILS_AVAILABLE:
         scanners = {
-            "SelfContradiction": SelfContradictionScanner(),
-            "FactChecker": FactCheckerScanner(),
-            "HallucinationDetector": HallucinationDetectorScanner()
+            "FactChecker": FactCheckerScanner()
         }
     return scanners
 
@@ -199,14 +195,8 @@ def run_scanner_tests():
     messages = st.session_state.current_conversation["messages"]
     nemo_scanners = initialize_nemo_scanners()
 
-    if enabled_scanners.get("SelfContradiction", False) and NEMO_GUARDRAILS_AVAILABLE:
-        nemo_results["SelfContradiction"] = nemo_scanners["SelfContradiction"].scan(messages)
-
     if enabled_scanners.get("FactChecker", False) and NEMO_GUARDRAILS_AVAILABLE:
         nemo_results["FactChecker"] = nemo_scanners["FactChecker"].scan(messages)
-
-    if enabled_scanners.get("HallucinationDetector", False) and NEMO_GUARDRAILS_AVAILABLE:
-        nemo_results["HallucinationDetector"] = nemo_scanners["HallucinationDetector"].scan(messages)
 
     # Store results
     test_result = {
