@@ -66,7 +66,7 @@ def initialize_session_state():
         st.session_state.enabled_scanners = {
             "PromptGuard": True,
             "AlignmentCheck": True,
-            "FactChecker": NEMO_GUARDRAILS_AVAILABLE
+            "FactsChecker": NEMO_GUARDRAILS_AVAILABLE
         }
 
     # Initialize input field state for clearing after adding messages
