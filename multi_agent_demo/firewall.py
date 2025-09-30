@@ -51,7 +51,7 @@ def initialize_firewall():
 
     # If no LlamaFirewall scanners but NeMo scanners are enabled, still return a minimal firewall
     if not scanner_config:
-        nemo_enabled = any(enabled_scanners.get(name, False) for name in ["SelfContradiction", "FactChecker", "HallucinationDetector"])
+        nemo_enabled = any(enabled_scanners.get(name, False) for name in ["FactsChecker"])
         if nemo_enabled:
             print("ℹ️ Only NeMo scanners enabled, LlamaFirewall not needed but returning placeholder")
             # Return None for firewall, but tests will still run NeMo scanners
@@ -82,7 +82,7 @@ def initialize_nemo_scanners():
     scanners = {}
     if NEMO_GUARDRAILS_AVAILABLE:
         scanners = {
-            "FactChecker": FactCheckerScanner()
+            "FactsChecker": FactCheckerScanner()
         }
     return scanners
 
@@ -195,8 +195,8 @@ def run_scanner_tests():
     messages = st.session_state.current_conversation["messages"]
     nemo_scanners = initialize_nemo_scanners()
 
-    if enabled_scanners.get("FactChecker", False) and NEMO_GUARDRAILS_AVAILABLE:
-        nemo_results["FactChecker"] = nemo_scanners["FactChecker"].scan(messages)
+    if enabled_scanners.get("FactsChecker", False) and NEMO_GUARDRAILS_AVAILABLE:
+        nemo_results["FactsChecker"] = nemo_scanners["FactsChecker"].scan(messages)
 
     # Store results
     test_result = {

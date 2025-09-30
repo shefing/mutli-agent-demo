@@ -96,7 +96,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             # Extract assistant messages for fact-checking
             assistant_messages = [msg for msg in messages if msg.get("type") == "assistant"]
             if not assistant_messages:
-                return {"error": "No assistant messages to fact-check", "scanner": "FactChecker"}
+                return {"error": "No assistant messages to fact-check", "scanner": "FactsChecker"}
 
             last_message = assistant_messages[-1]["content"]
 
@@ -104,11 +104,11 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             if self.rails is not None:
                 return self._nemo_fact_check(last_message, messages)
             else:
-                return {"error": "NeMo GuardRails not properly initialized", "scanner": "FactChecker"}
+                return {"error": "NeMo GuardRails not properly initialized", "scanner": "FactsChecker"}
 
         except Exception as e:
             print(f"❌ FactChecker error: {e}")
-            return {"error": f"Error during fact-checking: {str(e)}", "scanner": "FactChecker"}
+            return {"error": f"Error during fact-checking: {str(e)}", "scanner": "FactsChecker"}
 
     def _nemo_fact_check(self, message: str, messages: List[Dict]) -> Dict:
         """Use NeMo GuardRails basic fact-checking - no customization"""
@@ -184,7 +184,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                 reason = f"NeMo Fact-Check: No false claims detected. Response: {nemo_response[:200]}..."
 
             return {
-                "scanner": "FactChecker",
+                "scanner": "FactsChecker",
                 "decision": decision,
                 "score": score,
                 "reason": reason,
@@ -198,4 +198,4 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             print(f"❌ NeMo fact-checking failed: {e}")
             import traceback
             print(f"❌ Full traceback: {traceback.format_exc()}")
-            return {"error": f"NeMo fact-checking failed: {str(e)}", "scanner": "FactChecker"}
+            return {"error": f"NeMo fact-checking failed: {str(e)}", "scanner": "FactsChecker"}

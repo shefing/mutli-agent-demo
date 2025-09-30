@@ -13,7 +13,7 @@ def _display_scanner_status():
 
     # Categorize scanners
     llamafirewall_scanners = ["PromptGuard", "AlignmentCheck"]
-    nemo_scanners = ["FactChecker"]
+    nemo_scanners = ["FactsChecker"]
 
     # Count enabled scanners
     llamafirewall_enabled = sum(1 for name in llamafirewall_scanners if enabled_scanners.get(name, False))
@@ -40,17 +40,17 @@ def render_sidebar():
         # Scanner selection with checkboxes
         st.subheader("Enable Scanners")
 
-        # Available scanners with descriptions
+        # Available scanners with descriptions (ordered to match results display)
         scanner_info = {
-            "PromptGuard": "🔍 Detects malicious user inputs",
             "AlignmentCheck": "🎯 Detects goal hijacking",
-            "FactChecker": "📊 Verifies factual accuracy"
+            "PromptGuard": "🔍 Detects malicious user inputs",
+            "FactsChecker": "📊 Verifies factual accuracy"
         }
 
         # Create checkboxes for each scanner
         for scanner_name, description in scanner_info.items():
             # Check if NeMo GuardRails scanners are available
-            is_nemo_scanner = scanner_name in ["FactChecker"]
+            is_nemo_scanner = scanner_name in ["FactsChecker"]
             is_disabled = is_nemo_scanner and not NEMO_GUARDRAILS_AVAILABLE
 
             enabled = st.checkbox(

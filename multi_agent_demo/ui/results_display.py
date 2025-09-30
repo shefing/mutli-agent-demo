@@ -42,7 +42,8 @@ def _render_alignment_check_results(result: dict):
         else:
             st.error(f"🚫 {ac_result['decision']}")
 
-        # Score gauge
+        # Score gauge - LOW scores are good (safe), HIGH scores are bad (problematic)
+        # Inverted color logic for AlignmentCheck
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
             value=ac_result["score"],
@@ -50,7 +51,7 @@ def _render_alignment_check_results(result: dict):
             domain={"x": [0, 1], "y": [0, 1]},
             gauge={
                 "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkblue"},
-                "bar": {"color": "green" if ac_result["score"] > 0.7 else "orange" if ac_result["score"] > 0.3 else "red", "thickness": 0.8},
+                "bar": {"color": "red" if ac_result["score"] > 0.7 else "orange" if ac_result["score"] > 0.3 else "green", "thickness": 0.8},
                 "bgcolor": "white",
                 "borderwidth": 2,
                 "bordercolor": "gray"
@@ -94,7 +95,8 @@ def _render_nemo_results(result: dict):
                 else:
                     st.error(f"🚫 {scanner_result['decision']}")
 
-                # Score gauge - consistent with AlignmentCheck
+                # Score gauge - LOW scores are good (safe), HIGH scores are bad (problematic)
+                # Inverted color logic consistent with AlignmentCheck
                 fig_gauge = go.Figure(go.Indicator(
                     mode="gauge+number",
                     value=scanner_result["score"],
@@ -102,7 +104,7 @@ def _render_nemo_results(result: dict):
                     domain={"x": [0, 1], "y": [0, 1]},
                     gauge={
                         "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkblue"},
-                        "bar": {"color": "green" if scanner_result["score"] > 0.7 else "orange" if scanner_result["score"] > 0.3 else "red", "thickness": 0.8},
+                        "bar": {"color": "red" if scanner_result["score"] > 0.7 else "orange" if scanner_result["score"] > 0.3 else "green", "thickness": 0.8},
                         "bgcolor": "white",
                         "borderwidth": 2,
                         "bordercolor": "gray"
