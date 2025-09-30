@@ -33,12 +33,25 @@ llamafirewall configure
 
 This is a demonstration application for testing AI Agent Guards (security scanners). The application focuses on testing and visualizing the behavior of different security scanners that protect AI agents from malicious inputs and goal hijacking.
 
-### Core Components
-- **Scanner Testing Interface** (`guards_demo_ui.py`): Streamlit-based UI for testing multiple AI security scanners
-- **LlamaFirewall Integration**: Uses LlamaFirewall's security scanners:
+### Module Structure (Refactored)
+The application is organized into specialized modules for maintainability:
+
+- **`guards_demo_ui.py`** (112 lines): Main application entry point
+- **`firewall.py`**: Scanner orchestration and LlamaFirewall integration
+- **`scanners/`**: Scanner implementation classes
+  - `nemo_scanners.py`: NeMo GuardRails scanner implementations
+- **`scenarios/`**: Scenario management and persistence
+  - `scenario_manager.py`: Load/save scenarios, predefined scenarios
+- **`ui/`**: UI component modules
+  - `sidebar.py`: Scanner configuration interface
+  - `conversation_builder.py`: Conversation creation/editing
+  - `results_display.py`: Test results visualization
+
+### Security Scanners
+- **LlamaFirewall Integration**:
   - PromptGuard Scanner: Pre-execution input validation to detect malicious prompts
   - AlignmentCheck Scanner: Runtime behavioral monitoring to detect goal hijacking
-- **NeMo GuardRails Integration**: NVIDIA's advanced content safety toolkit:
+- **NeMo GuardRails Integration** (NVIDIA's advanced content safety toolkit):
   - SelfContradiction Scanner: Detects response inconsistencies and contradictions
   - FactChecker Scanner: Verifies factual accuracy of AI responses
   - HallucinationDetector Scanner: Identifies hallucinated or ungrounded content
