@@ -21,6 +21,10 @@ from multi_agent_demo.scanners import (
     FactCheckerScanner,
     NEMO_GUARDRAILS_AVAILABLE
 )
+from multi_agent_demo.direct_scanner_wrapper import (
+    scan_alignment_check_direct,
+    scan_prompt_guard_direct
+)
 
 
 def initialize_firewall():
@@ -174,8 +178,8 @@ def test_prompt_guard(firewall, user_input: str) -> Dict:
         return {"error": str(e), "scanner": "PromptGuard"}
 
 
-def test_alignment_check(firewall, trace: Trace) -> Dict:
-    """Test AlignmentCheck scanner on conversation trace"""
+def test_alignment_check(firewall, trace: Trace, messages: List[Dict] = None, purpose: str = "") -> Dict:
+    """Test AlignmentCheck scanner on conversation trace with fallback to direct API"""
     try:
         result = firewall.scan_replay(trace)
 
@@ -186,7 +190,17 @@ def test_alignment_check(firewall, trace: Trace) -> Dict:
             "reason": result.reason,
             "is_safe": result.decision == ScanDecision.ALLOW
         }
+    except SyntaxError as e:
+        # Syntax error - try direct API fallback
+        print(f"⚠️ LlamaFirewall AlignmentCheck failed with SyntaxError, trying direct API fallback...")
+        if messages is not None:
+            return scan_alignment_check_direct(messages, purpose)
+        return {"error": f"SyntaxError and no messages for fallback: {str(e)}", "scanner": "AlignmentCheck"}
     except Exception as e:
+        # Other errors - try direct API fallback if available
+        print(f"⚠️ LlamaFirewall AlignmentCheck failed: {str(e)}, trying direct API fallback...")
+        if messages is not None:
+            return scan_alignment_check_direct(messages, purpose)
         return {"error": str(e), "scanner": "AlignmentCheck"}
 
 
@@ -219,9 +233,22 @@ def run_scanner_tests():
     promptguard_results = []
     nemo_results = {}
 
-    # Test AlignmentCheck if enabled (requires firewall)
-    if enabled_scanners.get("AlignmentCheck", False) and firewall is not None:
-        alignment_result = test_alignment_check(firewall, trace)
+    # Test AlignmentCheck if enabled (with fallback to direct API if firewall fails)
+    if enabled_scanners.get("AlignmentCheck", False):
+        if firewall is not None:
+            alignment_result = test_alignment_check(
+                firewall,
+                trace,
+                messages=st.session_state.current_conversation["messages"],
+                purpose=st.session_state.current_conversation["purpose"]
+            )
+        else:
+            # No firewall, use direct API
+            print("ℹ️ Using direct AlignmentCheck API (no firewall)")
+            alignment_result = scan_alignment_check_direct(
+                st.session_state.current_conversation["messages"],
+                st.session_state.current_conversation["purpose"]
+            )
 
     # Test PromptGuard if enabled (requires firewall)
     if enabled_scanners.get("PromptGuard", False) and firewall is not None:
