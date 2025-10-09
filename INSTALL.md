@@ -87,11 +87,40 @@ If you encounter "resolution-too-deep" errors:
 - **Minimal install**: Basic UI works, scanners show as unavailable
 
 ## Environment Variables
+
+### Local Development
 Ensure your `.env` file contains:
 ```bash
 OPENAI_API_KEY=your_openai_key
 HF_TOKEN=your_huggingface_token
 TOGETHER_API_KEY=your_together_key
 ```
+
+### Streamlit Cloud Deployment
+
+When deploying to Streamlit Cloud, you **must** configure secrets instead of using a `.env` file:
+
+1. **Go to your app settings** on Streamlit Cloud
+2. **Navigate to "Secrets"** section
+3. **Add the following secrets** (in TOML format):
+
+```toml
+OPENAI_API_KEY = "sk-your-openai-key"
+HF_TOKEN = "hf_your-huggingface-token"
+TOGETHER_API_KEY = "your-together-key"
+```
+
+**Important Notes:**
+- ✅ **TOGETHER_API_KEY** is **required** for AlignmentCheck scanner
+- ✅ **HF_TOKEN** is recommended for PromptGuard scanner (works without but may have issues)
+- ✅ **OPENAI_API_KEY** is required for NeMo FactsChecker scanner
+- ⚠️ Without proper API tokens, you'll see errors like: "expected an indented block after function definition on line 3"
+- ⚠️ The application will show error messages guiding you to configure missing tokens
+
+### Verifying Deployment
+After configuring secrets:
+1. Restart your Streamlit Cloud app
+2. Check the app logs for confirmation messages like: "✅ LlamaFirewall initialized"
+3. Test each scanner to ensure they're working properly
 
 The application will gracefully handle missing dependencies and show appropriate warnings in the UI.
