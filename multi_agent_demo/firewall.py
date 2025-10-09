@@ -161,6 +161,14 @@ def test_prompt_guard(firewall, user_input: str) -> Dict:
             "reason": result.reason,
             "is_safe": result.decision == ScanDecision.ALLOW
         }
+    except SyntaxError as e:
+        error_msg = f"PromptGuard model loading error (Streamlit Cloud compatibility issue): {str(e)}"
+        print(f"❌ PromptGuard scan failed with SyntaxError: {error_msg}")
+        return {
+            "error": error_msg,
+            "scanner": "PromptGuard",
+            "streamlit_cloud_note": "This error occurs on Streamlit Cloud due to model compatibility issues. PromptGuard may not work on Streamlit Cloud's environment."
+        }
     except Exception as e:
         print(f"❌ PromptGuard scan failed: {str(e)}")
         return {"error": str(e), "scanner": "PromptGuard"}

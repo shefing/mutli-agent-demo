@@ -1,13 +1,25 @@
 # Streamlit Cloud Deployment Fix
 
 ## Issue
-When deployed on Streamlit Cloud, LlamaFirewall scanners (PromptGuard, AlignmentCheck) show error:
+When deployed on Streamlit Cloud, you may see this error:
 ```
 Error: expected an indented block after function definition on line 3 (<unknown>, line 3)
 ```
 
-## Root Cause
+## Root Causes
+
+### 1. Missing API Tokens (Primary Issue)
 This error occurs when **API tokens are not configured in Streamlit Cloud secrets**. LlamaFirewall makes API calls during initialization, and without proper authentication, it receives malformed responses that cause syntax errors.
+
+### 2. PromptGuard Model Compatibility (Secondary Issue)
+Even with proper API tokens, **PromptGuard may fail on Streamlit Cloud** due to model loading issues. The error occurs when the scanner tries to load the `meta-llama/Llama-Prompt-Guard-2-86M` model in Streamlit Cloud's environment.
+
+**Observed behavior:**
+- ✅ PromptGuard downloads successfully
+- ✅ LlamaFirewall initializes successfully
+- ❌ PromptGuard fails when actually scanning messages
+
+**Workaround:** Disable PromptGuard on Streamlit Cloud and use only AlignmentCheck and FactsChecker scanners.
 
 ## Solution
 
@@ -96,24 +108,71 @@ def initialize_firewall():
 ### 4. Verification
 
 After deployment, you should see:
-- ✅ No syntax errors
-- ✅ Scanners initialize properly
+- ✅ No initialization errors
+- ✅ LlamaFirewall initializes properly
 - ✅ Clear error messages if tokens are still missing
-- ✅ All three scanners (AlignmentCheck, PromptGuard, FactsChecker) working
+- ⚠️ **PromptGuard may fail on Streamlit Cloud** (see workaround below)
+- ✅ AlignmentCheck works properly
+- ✅ FactsChecker works properly
 
-### 5. Fallback Behavior
+### 5. PromptGuard Workaround for Streamlit Cloud
 
-If API tokens are not configured:
+If PromptGuard fails with the syntax error on Streamlit Cloud:
+
+**Option A: Disable PromptGuard** (Recommended for Streamlit Cloud)
+1. In the sidebar, uncheck "PromptGuard"
+2. Use AlignmentCheck and FactsChecker only
+3. Deploy locally if PromptGuard testing is critical
+
+**Option B: Default to Disabled** (Code change)
+Edit `guards_demo_ui.py` to disable PromptGuard by default:
+```python
+if "enabled_scanners" not in st.session_state:
+    st.session_state.enabled_scanners = {
+        "PromptGuard": False,  # Disabled by default for Streamlit Cloud
+        "AlignmentCheck": True,
+        "FactsChecker": NEMO_GUARDRAILS_AVAILABLE
+    }
+```
+
+The UI now shows a clear message when PromptGuard fails:
+```
+⚠️ Streamlit Cloud Compatibility Issue
+PromptGuard scanner uses models that may not be compatible with
+Streamlit Cloud's environment. This scanner works on local deployments.
+```
+
+### 6. Fallback Behavior
+
+The application gracefully handles scanner failures:
+
+**Missing API Tokens:**
 - **AlignmentCheck**: Shows clear error message, returns None (test won't run)
-- **PromptGuard**: Shows warning, attempts to run (may work with cached models)
+- **PromptGuard**: Shows warning, attempts to run (may fail)
 - **FactsChecker**: Shows error when attempting to use (requires OpenAI)
 
-The application gracefully handles missing scanners and continues to function with available ones.
+**PromptGuard Model Loading Issues (Streamlit Cloud):**
+- Shows user-friendly error: "⚠️ Streamlit Cloud Compatibility Issue"
+- Provides guidance: "This scanner works on local deployments"
+- Other scanners continue to work normally
+- Application remains functional with remaining scanners
 
 ## Files Modified
 
-- `multi_agent_demo/firewall.py` - Enhanced error handling and token validation
-- `INSTALL.md` - Added Streamlit Cloud deployment section
+1. **`multi_agent_demo/firewall.py`**
+   - Added pre-initialization API token validation
+   - Enhanced error handling for SyntaxError in PromptGuard
+   - Added specific Streamlit Cloud compatibility notes
+
+2. **`multi_agent_demo/ui/results_display.py`**
+   - Added user-friendly error display for PromptGuard Streamlit Cloud issues
+   - Shows expandable technical details
+   - Guides users to use local deployment for PromptGuard
+
+3. **`INSTALL.md`**
+   - Added complete Streamlit Cloud deployment section
+   - Documented API token requirements
+   - Added troubleshooting guidance
 
 ## Testing
 
@@ -132,6 +191,27 @@ streamlit run multi_agent_demo/guards_demo_ui.py
 
 ## Summary
 
-**Problem:** Syntax error on Streamlit Cloud due to missing API tokens
-**Solution:** Configure API tokens in Streamlit Cloud secrets + improved error handling
-**Result:** Clear error messages guide users to fix configuration issues
+**Problem:**
+- Syntax error on Streamlit Cloud: "expected an indented block after function definition on line 3"
+- Affects LlamaFirewall scanners (PromptGuard, AlignmentCheck)
+
+**Root Causes:**
+1. Missing API tokens in Streamlit Cloud secrets
+2. PromptGuard model loading incompatibility with Streamlit Cloud environment
+
+**Solution:**
+1. Configure API tokens in Streamlit Cloud secrets (TOGETHER_API_KEY, HF_TOKEN, OPENAI_API_KEY)
+2. Enhanced error handling to catch and explain Streamlit Cloud issues
+3. Graceful fallback with clear user guidance
+
+**Result:**
+- ✅ Clear error messages guide users to fix configuration
+- ✅ AlignmentCheck works on Streamlit Cloud (with TOGETHER_API_KEY)
+- ✅ FactsChecker works on Streamlit Cloud (with OPENAI_API_KEY)
+- ⚠️ PromptGuard may need to be disabled on Streamlit Cloud
+- ✅ Application remains functional with available scanners
+
+**Recommended Streamlit Cloud Configuration:**
+- Enable: AlignmentCheck + FactsChecker
+- Disable: PromptGuard (or leave enabled and accept potential errors)
+- Use local deployment if PromptGuard testing is critical

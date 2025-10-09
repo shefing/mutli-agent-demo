@@ -150,7 +150,14 @@ def _render_prompt_guard_results(result: dict):
                     st.warning(f"⚠️ Risk detected: {pg_result['message']}")
                 st.caption(f"Score: {pg_result.get('score', 'N/A')} | Decision: {pg_result.get('decision', 'N/A')}")
             else:
-                st.error(f"Error: {pg_result['error']}")
+                # Check if this is a Streamlit Cloud compatibility issue
+                if "streamlit_cloud_note" in pg_result:
+                    st.error(f"⚠️ **Streamlit Cloud Compatibility Issue**")
+                    st.warning("PromptGuard scanner uses models that may not be compatible with Streamlit Cloud's environment. This scanner works on local deployments.")
+                    with st.expander("🔍 Technical Details"):
+                        st.code(pg_result['error'])
+                else:
+                    st.error(f"Error: {pg_result['error']}")
     else:
         st.info("🔒 No user messages to scan with PromptGuard")
 
