@@ -31,11 +31,30 @@ def initialize_firewall():
     Previously returned None if no LlamaFirewall scanners were enabled,
     even when NeMo scanners were selected.
     """
+    import os
+
+    # Check for required API tokens BEFORE attempting initialization
+    enabled_scanners = st.session_state.enabled_scanners
+    llamafirewall_scanners = ["PromptGuard", "AlignmentCheck"]
+
+    # Check if any LlamaFirewall scanner is enabled
+    llamafirewall_enabled = any(enabled_scanners.get(name, False) for name in llamafirewall_scanners)
+
+    if llamafirewall_enabled:
+        # Verify required API tokens exist
+        if enabled_scanners.get("AlignmentCheck", False):
+            together_key = os.getenv("TOGETHER_API_KEY")
+            if not together_key:
+                st.error("⚠️ AlignmentCheck requires TOGETHER_API_KEY. Please configure it in Streamlit Cloud secrets.")
+                return None
+
+        if enabled_scanners.get("PromptGuard", False):
+            hf_token = os.getenv("HF_TOKEN")
+            if not hf_token:
+                st.warning("⚠️ PromptGuard works best with HF_TOKEN. Configure it in Streamlit Cloud secrets if you encounter issues.")
 
     # Build scanner configuration for LlamaFirewall scanners only
     scanner_config = {}
-    enabled_scanners = st.session_state.enabled_scanners
-    llamafirewall_scanners = ["PromptGuard", "AlignmentCheck"]
 
     if enabled_scanners.get("PromptGuard", False):
         scanner_config[Role.USER] = scanner_config.get(Role.USER, []) + [ScannerType.PROMPT_GUARD]
@@ -49,29 +68,42 @@ def initialize_firewall():
         print("⚠️ No scanners enabled at all")
         return None
 
-    # If no LlamaFirewall scanners but NeMo scanners are enabled, still return a minimal firewall
+    # If no LlamaFirewall scanners but NeMo scanners are enabled, return None
     if not scanner_config:
         nemo_enabled = any(enabled_scanners.get(name, False) for name in ["FactsChecker"])
         if nemo_enabled:
-            print("ℹ️ Only NeMo scanners enabled, LlamaFirewall not needed but returning placeholder")
-            # Return None for firewall, but tests will still run NeMo scanners
+            print("ℹ️ Only NeMo scanners enabled, LlamaFirewall not needed")
             return None
         else:
             print("⚠️ No LlamaFirewall scanners enabled")
             return None
 
+    # Validate scanner configuration before passing to LlamaFirewall
+    if not scanner_config or not any(scanner_config.values()):
+        print("⚠️ Scanner configuration is empty, skipping LlamaFirewall initialization")
+        return None
+
     try:
         llamafirewall_names = [name for name in llamafirewall_scanners if enabled_scanners.get(name, False)]
         print(f"🚀 Initializing LlamaFirewall with scanners: {llamafirewall_names}")
+        print(f"🔧 Scanner config: {scanner_config}")
+
+        # Initialize with explicit configuration
         firewall = LlamaFirewall(scanner_config)
 
         print(f"✅ LlamaFirewall initialized with {len(llamafirewall_names)} scanner(s): {llamafirewall_names}")
         return firewall
 
+    except SyntaxError as e:
+        print(f"❌ LlamaFirewall initialization failed with SyntaxError: {str(e)}")
+        st.error(f"⚠️ LlamaFirewall configuration error: {str(e)}. This may be due to API token issues or environment differences.")
+        return None
     except Exception as e:
         print(f"❌ LlamaFirewall initialization failed: {str(e)}")
         if "401" in str(e) or "Unauthorized" in str(e):
-            st.error("⚠️ LlamaFirewall initialization failed due to authentication. Check your API tokens.")
+            st.error("⚠️ LlamaFirewall initialization failed due to authentication. Check your API tokens in Streamlit Cloud secrets.")
+        elif "expected an indented block" in str(e):
+            st.error("⚠️ LlamaFirewall configuration error. Please check your API tokens are properly configured in Streamlit Cloud secrets.")
         else:
             st.error(f"⚠️ LlamaFirewall initialization error: {str(e)}")
         return None
