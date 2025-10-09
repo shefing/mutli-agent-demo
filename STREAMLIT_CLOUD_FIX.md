@@ -45,7 +45,31 @@ OPENAI_API_KEY = "sk-your-openai-key"
 - ✅ **HF_TOKEN** - Recommended for PromptGuard (may work without but better with)
 - ✅ **OPENAI_API_KEY** - Required for FactsChecker
 
-### 2. Code Improvements Made
+### 2. Environment Configuration for Streamlit Cloud
+
+Added critical environment variables in `guards_demo_ui.py` to prevent torch compilation errors:
+
+```python
+# Disable torch.compile() which can cause syntax errors in Streamlit Cloud
+os.environ['TORCH_COMPILE_DISABLE'] = '1'
+os.environ['PYTORCH_JIT'] = '0'  # Disable JIT compilation
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Stability
+
+# Configure writable cache directory
+os.environ['HF_HOME'] = '/tmp/.cache/huggingface'
+
+# Disable torch dynamo errors
+import torch
+if hasattr(torch, '_dynamo'):
+    torch._dynamo.config.suppress_errors = True
+```
+
+**Why this matters:**
+- The "expected an indented block" error is caused by PyTorch's dynamic code compilation (`torch.compile()` or JIT)
+- Streamlit Cloud's restricted environment doesn't support dynamic code generation
+- Disabling these features forces eager execution mode
+
+### 3. Code Improvements Made
 
 Enhanced `multi_agent_demo/firewall.py` with:
 
@@ -212,6 +236,9 @@ streamlit run multi_agent_demo/guards_demo_ui.py
 - ✅ Application remains functional with available scanners
 
 **Recommended Streamlit Cloud Configuration:**
-- Enable: AlignmentCheck + FactsChecker
-- Disable: PromptGuard (or leave enabled and accept potential errors)
-- Use local deployment if PromptGuard testing is critical
+- ✅ Enable: AlignmentCheck + PromptGuard + FactsChecker (with new torch.compile fix)
+- ⚠️ If issues persist: Disable PromptGuard, keep AlignmentCheck + FactsChecker
+- 📌 Use local deployment for guaranteed compatibility with all scanners
+
+**Latest Fix (2025-10-09):**
+Added environment variables to disable PyTorch dynamic compilation which was causing the syntax error. This should allow both AlignmentCheck and PromptGuard to work on Streamlit Cloud.

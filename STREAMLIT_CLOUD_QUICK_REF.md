@@ -1,8 +1,12 @@
 # Streamlit Cloud Quick Reference
 
-## Current Status
+## Current Status - UPDATED 2025-10-09
 
-Your Streamlit Cloud deployment is experiencing a **PromptGuard compatibility issue**. This is expected and now handled gracefully.
+**Root cause identified:** PyTorch dynamic compilation (`torch.compile()`) causing syntax errors in Streamlit Cloud's restricted environment.
+
+**Fix applied:** Added environment variables to disable torch.compile() and JIT compilation.
+
+**Expected result:** Both AlignmentCheck and PromptGuard should now work on Streamlit Cloud.
 
 ## What's Working ✅
 
@@ -21,26 +25,58 @@ From your logs, we can see:
 - Error: `expected an indented block after function definition on line 3`
 - Root cause: Model loading incompatibility with Streamlit Cloud environment
 
-## Immediate Solution
+## What Changed (Latest Fix)
 
-**Option 1: Disable PromptGuard (Recommended)**
+**Added to `guards_demo_ui.py`:**
+```python
+# Disable torch.compile() which can cause syntax errors
+os.environ['TORCH_COMPILE_DISABLE'] = '1'
+os.environ['PYTORCH_JIT'] = '0'  # Disable JIT compilation
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+# Configure writable cache
+os.environ['HF_HOME'] = '/tmp/.cache/huggingface'
+
+# Disable torch dynamo errors
+import torch
+if hasattr(torch, '_dynamo'):
+    torch._dynamo.config.suppress_errors = True
+```
+
+**What this fixes:**
+- Prevents PyTorch from generating dynamic Python code at runtime
+- Forces eager execution mode (compatible with Streamlit Cloud)
+- Should resolve "expected an indented block" errors
+
+## Testing the Fix
+
+**After deploying these changes:**
+1. Push code to your repository
+2. Streamlit Cloud will auto-redeploy
+3. Check logs for: "🔧 Disabled torch.compile() and JIT for Streamlit Cloud compatibility"
+4. Test both AlignmentCheck and PromptGuard scanners
+5. Both should now work without syntax errors
+
+## Fallback Plan
+
+**If the fix doesn't work (Option 1 - Temporary):**
 1. In your deployed app sidebar
 2. Uncheck "☑️ PromptGuard"
 3. Use only AlignmentCheck + FactsChecker
-4. Both of these work fine on Streamlit Cloud
+4. Report the issue with full logs
 
-**Option 2: Accept the Error**
-- Leave PromptGuard enabled
-- UI will show a user-friendly message explaining the Streamlit Cloud limitation
-- Other scanners will continue to work
+**Option 2: Local Deployment**
+- Clone the repo locally
+- All 3 scanners work perfectly in local environment
+- Use for comprehensive testing
 
-## Scanner Status on Streamlit Cloud
+## Scanner Status on Streamlit Cloud (After Fix)
 
 | Scanner | Status | Requirements | Notes |
 |---------|--------|--------------|-------|
-| **AlignmentCheck** | ✅ Works | TOGETHER_API_KEY in secrets | Fully functional |
-| **PromptGuard** | ⚠️ May Fail | HF_TOKEN in secrets | Model loading issues |
-| **FactsChecker** | ✅ Works | OPENAI_API_KEY in secrets | Fully functional |
+| **AlignmentCheck** | ✅ Should Work | TOGETHER_API_KEY in secrets | Fixed with torch.compile disable |
+| **PromptGuard** | ✅ Should Work | HF_TOKEN in secrets | Fixed with torch.compile disable |
+| **FactsChecker** | ✅ Works | OPENAI_API_KEY in secrets | Always worked |
 
 ## Required Secrets Configuration
 
