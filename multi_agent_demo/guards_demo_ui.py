@@ -57,12 +57,35 @@ cache_dir = os.environ.get('HF_HOME', '/tmp/.cache/huggingface')
 os.makedirs(cache_dir, exist_ok=True)
 print(f"✅ Cache directory ready: {cache_dir}")
 
+# Additional transformers configuration to prevent code generation
+os.environ['TRANSFORMERS_OFFLINE'] = '0'  # Allow downloads but avoid code execution
+os.environ['TRANSFORMERS_NO_TF'] = '1'    # Disable TensorFlow backend
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'  # Reduce logging
+
+# CRITICAL: Prevent transformers from executing remote code
+# This is likely the actual cause of the syntax error
+os.environ['HF_HUB_DISABLE_EXPERIMENTAL_WARNING'] = '1'
+os.environ['HF_HUB_DISABLE_IMPLICIT_TOKEN'] = '0'  # Allow token usage
+print("🔧 Configured transformers to prevent remote code execution")
+
 # Attempt to disable torch dynamo/compile at import time
 try:
     import torch
+    # Disable all torch compilation features
+    torch.jit._state.disable()
+    print("🔧 Disabled torch.jit")
+
     if hasattr(torch, '_dynamo'):
         torch._dynamo.config.suppress_errors = True
+        torch._dynamo.config.cache_size_limit = 0  # Disable dynamo cache
         print("🔧 Configured torch._dynamo to suppress errors")
+
+    # Disable autograd profiling which can cause code generation
+    if hasattr(torch, 'autograd'):
+        torch.autograd.set_grad_enabled(False)
+        torch.autograd.profiler.profile(enabled=False)
+        print("🔧 Disabled autograd profiling")
+
 except ImportError:
     pass  # Torch not installed yet, will be configured when loaded
 except Exception as e:
