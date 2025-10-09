@@ -8,12 +8,79 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 
+def _render_result_summary(result: dict):
+    """Render overall test result summary at the top"""
+    st.subheader("📊 Test Results Summary")
+
+    # Count results
+    blocked_count = 0
+    safe_count = 0
+    warning_count = 0
+    error_count = 0
+
+    # Check AlignmentCheck
+    if result["alignment_check"] and "error" not in result["alignment_check"]:
+        if not result["alignment_check"]["is_safe"]:
+            blocked_count += 1
+        else:
+            safe_count += 1
+    elif result["alignment_check"] and "error" in result["alignment_check"]:
+        error_count += 1
+
+    # Check PromptGuard
+    for pg in result.get("prompt_guard", []):
+        if "error" not in pg:
+            if not pg["is_safe"]:
+                warning_count += 1
+            else:
+                safe_count += 1
+        else:
+            error_count += 1
+
+    # Check NeMo results
+    for scanner_result in result.get("nemo_results", {}).values():
+        if "error" not in scanner_result:
+            if not scanner_result["is_safe"]:
+                blocked_count += 1
+            else:
+                safe_count += 1
+        else:
+            error_count += 1
+
+    # Display summary
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("🚫 Blocked", blocked_count)
+    with col2:
+        st.metric("⚠️ Warnings", warning_count)
+    with col3:
+        st.metric("✅ Safe", safe_count)
+    with col4:
+        st.metric("❌ Errors", error_count)
+
+    # Overall verdict
+    if blocked_count > 0:
+        st.error("🚨 **OVERALL: BLOCKED** - One or more scanners detected threats")
+    elif warning_count > 0:
+        st.warning("⚠️ **OVERALL: WARNING** - Potential risks detected")
+    elif error_count > 0:
+        st.info("ℹ️ **OVERALL: ERRORS** - Some scanners encountered errors")
+    else:
+        st.success("✅ **OVERALL: SAFE** - All scanners passed")
+
+
 def render_test_results():
     """Render test results display"""
     if not st.session_state.test_results:
         return
 
     latest_result = st.session_state.test_results[-1]
+
+    # Result Summary at top
+    _render_result_summary(latest_result)
+
+    st.divider()
 
     # AlignmentCheck Results
     _render_alignment_check_results(latest_result)
@@ -42,19 +109,25 @@ def _render_alignment_check_results(result: dict):
         else:
             st.error(f"🚫 {ac_result['decision']}")
 
-        # Score gauge - LOW scores are good (safe), HIGH scores are bad (problematic)
-        # Inverted color logic for AlignmentCheck
+        # Risk gauge - FULL gauge = DANGER, EMPTY gauge = SAFE
+        # Always red, fill level indicates risk
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
             value=ac_result["score"],
-            number={"font": {"size": 24}},
+            number={"font": {"size": 24}, "suffix": " Risk"},
             domain={"x": [0, 1], "y": [0, 1]},
+            title={"text": "Risk Level", "font": {"size": 16}},
             gauge={
-                "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkblue"},
-                "bar": {"color": "red" if ac_result["score"] > 0.7 else "orange" if ac_result["score"] > 0.3 else "green", "thickness": 0.8},
-                "bgcolor": "white",
+                "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkred"},
+                "bar": {"color": "red", "thickness": 0.8},  # Always red
+                "bgcolor": "lightgray",
                 "borderwidth": 2,
-                "bordercolor": "gray"
+                "bordercolor": "darkred",
+                "steps": [
+                    {"range": [0, 0.3], "color": "rgba(144, 238, 144, 0.3)"},  # Light green zone (safe)
+                    {"range": [0.3, 0.7], "color": "rgba(255, 255, 0, 0.3)"},  # Light yellow zone (warning)
+                    {"range": [0.7, 1], "color": "rgba(255, 0, 0, 0.2)"}       # Light red zone (danger)
+                ]
             }
         ))
         fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
@@ -95,19 +168,25 @@ def _render_nemo_results(result: dict):
                 else:
                     st.error(f"🚫 {scanner_result['decision']}")
 
-                # Score gauge - LOW scores are good (safe), HIGH scores are bad (problematic)
-                # Inverted color logic consistent with AlignmentCheck
+                # Risk gauge - FULL gauge = DANGER, EMPTY gauge = SAFE
+                # Always red, fill level indicates risk
                 fig_gauge = go.Figure(go.Indicator(
                     mode="gauge+number",
                     value=scanner_result["score"],
-                    number={"font": {"size": 24}},
+                    number={"font": {"size": 24}, "suffix": " Risk"},
                     domain={"x": [0, 1], "y": [0, 1]},
+                    title={"text": "Risk Level", "font": {"size": 16}},
                     gauge={
-                        "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkblue"},
-                        "bar": {"color": "red" if scanner_result["score"] > 0.7 else "orange" if scanner_result["score"] > 0.3 else "green", "thickness": 0.8},
-                        "bgcolor": "white",
+                        "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkred"},
+                        "bar": {"color": "red", "thickness": 0.8},  # Always red
+                        "bgcolor": "lightgray",
                         "borderwidth": 2,
-                        "bordercolor": "gray"
+                        "bordercolor": "darkred",
+                        "steps": [
+                            {"range": [0, 0.3], "color": "rgba(144, 238, 144, 0.3)"},  # Light green zone (safe)
+                            {"range": [0.3, 0.7], "color": "rgba(255, 255, 0, 0.3)"},  # Light yellow zone (warning)
+                            {"range": [0.7, 1], "color": "rgba(255, 0, 0, 0.2)"}       # Light red zone (danger)
+                        ]
                     }
                 ))
                 fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
