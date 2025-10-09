@@ -82,9 +82,16 @@ If you encounter "resolution-too-deep" errors:
    ```
 
 ### Scanner Availability
-- **All scanners work**: PromptGuard, AlignmentCheck, SelfContradiction, FactChecker, HallucinationDetector
-- **LlamaFirewall only**: PromptGuard, AlignmentCheck (NeMo GuardRails scanners disabled)
-- **Minimal install**: Basic UI works, scanners show as unavailable
+
+**Local Deployment:**
+- ✅ **AlignmentCheck** - Works (requires TOGETHER_API_KEY)
+- ✅ **PromptGuard** - Works (optional HF_TOKEN)
+- ✅ **FactsChecker** - Works (requires OPENAI_API_KEY)
+
+**Streamlit Cloud Deployment:**
+- ✅ **AlignmentCheck** - Works (requires TOGETHER_API_KEY in secrets)
+- ⚠️ **PromptGuard** - May fail due to model compatibility (see STREAMLIT_CLOUD_FIX.md)
+- ✅ **FactsChecker** - Works (requires OPENAI_API_KEY in secrets)
 
 ## Environment Variables
 
