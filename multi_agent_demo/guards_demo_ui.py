@@ -28,6 +28,20 @@ from multi_agent_demo.firewall import initialize_firewall
 # Load environment variables from .env file only
 load_dotenv()
 
+# Configure environment for LlamaFirewall compatibility
+# Set tokenizers parallelism to avoid warnings/errors
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Set to false for Streamlit Cloud stability
+
+# Disable torch.compile() which can cause syntax errors in Streamlit Cloud
+os.environ['TORCH_COMPILE_DISABLE'] = '1'
+os.environ['PYTORCH_JIT'] = '0'  # Disable JIT compilation
+print("🔧 Disabled torch.compile() and JIT for Streamlit Cloud compatibility")
+
+# Configure HuggingFace cache directory (writable in Streamlit Cloud)
+if not os.getenv('HF_HOME'):
+    os.environ['HF_HOME'] = '/tmp/.cache/huggingface'
+    print(f"📂 Set HF_HOME to: {os.environ['HF_HOME']}")
+
 # Ensure HF_TOKEN is available for transformers/huggingface_hub
 hf_token = os.getenv('HF_TOKEN')
 if hf_token:
@@ -37,6 +51,22 @@ if hf_token:
     print(f"🔑 HF_TOKEN loaded from .env: {hf_token[:15]}...{hf_token[-15:]} (length: {len(hf_token)})")
 else:
     print("❌ No HF_TOKEN found in .env file")
+
+# Create cache directory if it doesn't exist
+cache_dir = os.environ.get('HF_HOME', '/tmp/.cache/huggingface')
+os.makedirs(cache_dir, exist_ok=True)
+print(f"✅ Cache directory ready: {cache_dir}")
+
+# Attempt to disable torch dynamo/compile at import time
+try:
+    import torch
+    if hasattr(torch, '_dynamo'):
+        torch._dynamo.config.suppress_errors = True
+        print("🔧 Configured torch._dynamo to suppress errors")
+except ImportError:
+    pass  # Torch not installed yet, will be configured when loaded
+except Exception as e:
+    print(f"⚠️ Could not configure torch: {e}")
 
 
 # Page configuration
