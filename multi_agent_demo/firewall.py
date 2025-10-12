@@ -19,7 +19,9 @@ from llamafirewall import (
 
 from multi_agent_demo.scanners import (
     FactCheckerScanner,
-    NEMO_GUARDRAILS_AVAILABLE
+    NEMO_GUARDRAILS_AVAILABLE,
+    DataDisclosureGuardScanner,
+    PRESIDIO_AVAILABLE
 )
 from multi_agent_demo.direct_scanner_wrapper import (
     scan_alignment_check_direct,
@@ -114,12 +116,14 @@ def initialize_firewall():
 
 
 def initialize_nemo_scanners():
-    """Initialize NeMo GuardRails scanners"""
+    """Initialize NeMo GuardRails and other custom scanners"""
     scanners = {}
     if NEMO_GUARDRAILS_AVAILABLE:
-        scanners = {
-            "FactsChecker": FactCheckerScanner()
-        }
+        scanners["FactsChecker"] = FactCheckerScanner()
+
+    if PRESIDIO_AVAILABLE:
+        scanners["DataDisclosureGuard"] = DataDisclosureGuardScanner()
+
     return scanners
 
 
@@ -258,12 +262,16 @@ def run_scanner_tests():
                 result["message"] = msg["content"][:50] + "..."
                 promptguard_results.append(result)
 
-    # Test NeMo GuardRails scanners if enabled (don't require firewall)
+    # Test NeMo GuardRails and custom scanners if enabled (don't require firewall)
     messages = st.session_state.current_conversation["messages"]
+    purpose = st.session_state.current_conversation["purpose"]
     nemo_scanners = initialize_nemo_scanners()
 
     if enabled_scanners.get("FactsChecker", False) and NEMO_GUARDRAILS_AVAILABLE:
         nemo_results["FactsChecker"] = nemo_scanners["FactsChecker"].scan(messages)
+
+    if enabled_scanners.get("DataDisclosureGuard", False) and PRESIDIO_AVAILABLE:
+        nemo_results["DataDisclosureGuard"] = nemo_scanners["DataDisclosureGuard"].scan(messages, purpose)
 
     # Store results
     test_result = {

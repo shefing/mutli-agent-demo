@@ -8,8 +8,15 @@ from .nemo_scanners import (
     NEMO_GUARDRAILS_AVAILABLE
 )
 
+from .data_disclosure_scanner import (
+    DataDisclosureGuardScanner,
+    PRESIDIO_AVAILABLE
+)
+
 __all__ = [
     'NemoGuardRailsScanner',
     'FactCheckerScanner',
-    'NEMO_GUARDRAILS_AVAILABLE'
+    'NEMO_GUARDRAILS_AVAILABLE',
+    'DataDisclosureGuardScanner',
+    'PRESIDIO_AVAILABLE'
 ]

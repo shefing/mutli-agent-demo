@@ -20,7 +20,7 @@ parent_dir = Path(__file__).parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from multi_agent_demo.scanners import NEMO_GUARDRAILS_AVAILABLE
+from multi_agent_demo.scanners import NEMO_GUARDRAILS_AVAILABLE, PRESIDIO_AVAILABLE
 from multi_agent_demo.scenarios import load_saved_scenarios
 from multi_agent_demo.ui import render_sidebar, render_conversation_builder, render_test_results
 from multi_agent_demo.firewall import initialize_firewall
@@ -119,7 +119,8 @@ def initialize_session_state():
         st.session_state.enabled_scanners = {
             "PromptGuard": True,
             "AlignmentCheck": True,
-            "FactsChecker": NEMO_GUARDRAILS_AVAILABLE
+            "FactsChecker": NEMO_GUARDRAILS_AVAILABLE,
+            "DataDisclosureGuard": PRESIDIO_AVAILABLE
         }
 
     # Initialize input field state for clearing after adding messages

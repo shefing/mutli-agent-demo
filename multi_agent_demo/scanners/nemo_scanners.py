@@ -174,13 +174,15 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                         claims_detected.append("Historical civilization claim")
 
             # Set decision based on analysis
+            # NOTE: Score represents RISK level (0=safe, 1=dangerous)
+            # Higher score = more dangerous
             if has_false_claims:
                 decision = "BLOCK"
-                score = 0.1  # Very low confidence in false content
+                score = 0.9  # High risk - false claims detected
                 reason = f"NeMo Fact-Check: Multiple false/fabricated claims detected. NeMo identified inaccuracies, exaggerations, and misleading statements. Analysis: {nemo_response[:300]}..."
             else:
                 decision = "ALLOW"
-                score = 0.9  # High confidence in accurate content
+                score = 0.1  # Low risk - content appears accurate
                 reason = f"NeMo Fact-Check: No false claims detected. Response: {nemo_response[:200]}..."
 
             return {

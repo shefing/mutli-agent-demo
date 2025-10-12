@@ -88,7 +88,7 @@ def render_test_results():
     # PromptGuard Results
     _render_prompt_guard_results(latest_result)
 
-    # NeMo GuardRails Results
+    # NeMo GuardRails Results (includes DataDisclosureGuard)
     _render_nemo_results(latest_result)
 
     # History chart
@@ -202,7 +202,42 @@ def _render_nemo_results(result: dict):
                 # Show analysis with expandable full response
                 st.info(f"**Analysis:** {scanner_result['reason']}")
 
-                # Add expandable section for full AI response
+                # Special handling for DataDisclosureGuard PII findings
+                if scanner_name == "DataDisclosureGuard" and "pii_findings" in scanner_result:
+                    pii_findings = scanner_result["pii_findings"]
+                    if pii_findings:
+                        # Get overall alignment status (all findings share same alignment)
+                        overall_aligned = pii_findings[0]['is_aligned'] if pii_findings else True
+                        alignment_reason = pii_findings[0]['alignment_check'].get('reason', 'N/A') if pii_findings else 'N/A'
+
+                        # Collect all unique PII types
+                        all_pii_types = set()
+                        for finding in pii_findings:
+                            for entity in finding['pii_entities']:
+                                all_pii_types.add(entity['type'])
+
+                        # Show overall alignment assessment
+                        if overall_aligned:
+                            st.success(f"✅ **Alignment Check:** PII collection is appropriate for the stated purpose")
+                        else:
+                            st.error(f"❌ **Alignment Check:** PII collection appears misaligned with stated purpose")
+
+                        with st.expander(f"🔍 View PII Details ({len(pii_findings)} occurrence(s), {len(all_pii_types)} type(s))"):
+                            st.markdown(f"**Detected PII Types:** {', '.join(sorted(all_pii_types))}")
+                            st.markdown(f"**Overall Alignment:** {'✅ Aligned' if overall_aligned else '❌ Misaligned'}")
+
+                            if not overall_aligned:
+                                with st.expander("📄 View Alignment Reasoning"):
+                                    st.text(alignment_reason)
+
+                            st.divider()
+                            st.markdown("**PII Occurrences by Message:**")
+
+                            for idx, finding in enumerate(pii_findings, 1):
+                                pii_list = ', '.join([f"{e['type']}" for e in finding['pii_entities']])
+                                st.write(f"{idx}. **{finding['message_type'].capitalize()}** message: {pii_list}")
+
+                # Add expandable section for full AI response (for NeMo scanners)
                 if "ai_response" in scanner_result and scanner_result["ai_response"]:
                     with st.expander("🔍 View Full NeMo Analysis"):
                         st.text(scanner_result['ai_response'])
