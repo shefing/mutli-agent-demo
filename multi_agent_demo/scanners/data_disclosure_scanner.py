@@ -32,7 +32,6 @@ class DataDisclosureGuardScanner:
 
         try:
             from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
-            from presidio_analyzer.nlp_engine import NlpEngineProvider
 
             # Create custom SSN recognizer with explicit patterns
             ssn_patterns = [
@@ -99,10 +98,14 @@ class DataDisclosureGuardScanner:
 
             self.presidio_available = True
             print("✅ Presidio Analyzer loaded for DataDisclosureGuard with custom recognizers")
-        except ImportError:
-            print("⚠️ Presidio not available. DataDisclosureGuard will be disabled.")
+        except ImportError as e:
+            print(f"⚠️ Presidio not available. DataDisclosureGuard will be disabled. Error: {e}")
+            self.presidio_available = False
         except Exception as e:
             print(f"⚠️ Failed to initialize Presidio: {e}")
+            import traceback
+            print(f"⚠️ Traceback: {traceback.format_exc()}")
+            self.presidio_available = False
 
     def detect_pii(self, text: str) -> List[Dict]:
         """
