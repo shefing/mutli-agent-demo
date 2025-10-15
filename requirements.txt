@@ -13,7 +13,8 @@ requests>=2.28.0,<3.0.0
 llamafirewall>=1.0.3,<2.0.0
 
 # NeMo GuardRails for fact-checking, self-contradiction, and hallucination detection (with constraints)
-nemoguardrails>=0.16.0,<1.0.0
+# Temporarily disabled on Streamlit Cloud due to spaCy model download issues
+# nemoguardrails>=0.16.0,<1.0.0
 
 # Microsoft Presidio for PII detection in DataDisclosureGuard
 presidio-analyzer>=2.2.0,<3.0.0

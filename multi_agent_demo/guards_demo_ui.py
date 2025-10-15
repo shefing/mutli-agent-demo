@@ -28,6 +28,10 @@ from multi_agent_demo.firewall import initialize_firewall
 # Load environment variables from .env file only
 load_dotenv()
 
+# Prevent spaCy from downloading models on Streamlit Cloud
+os.environ['SPACY_WARNING_IGNORE'] = 'W008'
+os.environ['TRANSFORMERS_OFFLINE'] = '1'  # Prevent HuggingFace downloads too
+
 # Configure environment for LlamaFirewall compatibility
 # Set tokenizers parallelism to avoid warnings/errors
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Set to false for Streamlit Cloud stability
