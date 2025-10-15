@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install NumPy first with specific version to avoid binary incompatibility
-RUN pip install --no-cache-dir "numpy>=1.24.0,<1.27.0"
+RUN pip install --no-cache-dir "numpy>=2.1.1,<3.0.0"
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
