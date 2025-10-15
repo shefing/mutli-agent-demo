@@ -1,4 +1,5 @@
 # Dockerfile for Hugging Face Spaces deployment
+# Build cache invalidation: 2025-10-15-v4
 FROM python:3.11-slim
 
 WORKDIR /app
