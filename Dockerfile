@@ -6,6 +6,9 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    cmake \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install NumPy first with specific version to avoid binary incompatibility
@@ -13,11 +16,7 @@ RUN pip install --no-cache-dir "numpy>=1.24.0,<1.27.0"
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-binary :all: spacy || pip install --no-cache-dir spacy
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install spaCy model directly (avoids runtime download)
-RUN pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl
 
 # Copy application code
 COPY . .
