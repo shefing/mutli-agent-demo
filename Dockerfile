@@ -1,6 +1,7 @@
 # Dockerfile for Hugging Face Spaces deployment
-# Build cache invalidation: 2025-10-16-v6-torch-cpu-only
+# Build cache invalidation: 2025-10-16-v7-fix-permissions
 # Using CPU-only PyTorch to save ~5GB
+# Fixed: Use /tmp for writable storage on HF Spaces
 FROM python:3.11-slim
 
 WORKDIR /app
