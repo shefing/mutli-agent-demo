@@ -9,7 +9,25 @@ from typing import Dict, Optional
 from datetime import datetime
 
 # Persistent Scenario Storage System
-SCENARIOS_DIR = "saved_scenarios"
+# Use /tmp on HF Spaces/cloud environments (read-only filesystem issue)
+# Use local directory for development
+def get_scenarios_dir():
+    """Get appropriate scenarios directory based on environment"""
+    # Check if we're in a read-only environment (HF Spaces, Docker)
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    local_dir = os.path.join(base_dir, "saved_scenarios")
+
+    # Try to create in local directory first (for development)
+    try:
+        if os.path.exists(local_dir) or os.access(base_dir, os.W_OK):
+            return local_dir
+    except:
+        pass
+
+    # Fall back to /tmp for read-only filesystems
+    return "/tmp/saved_scenarios"
+
+SCENARIOS_DIR = get_scenarios_dir()
 SCENARIOS_FILE = os.path.join(SCENARIOS_DIR, "scenarios.json")
 
 
