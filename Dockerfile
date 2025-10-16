@@ -1,5 +1,6 @@
 # Dockerfile for Hugging Face Spaces deployment
-# Build cache invalidation: 2025-10-16-v5-storage-optimized
+# Build cache invalidation: 2025-10-16-v6-torch-cpu-only
+# Using CPU-only PyTorch to save ~5GB
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -16,14 +17,21 @@ RUN apt-get update && apt-get install -y \
 # Install NumPy first with specific version to avoid binary incompatibility
 RUN pip install --no-cache-dir "numpy>=2.1.1,<3.0.0"
 
+# Install PyTorch CPU-only version first (much smaller than CUDA version)
+# This saves ~5GB by avoiding CUDA dependencies
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
 # Copy requirements and install Python dependencies
 # Clean pip cache and remove unnecessary files to save space
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && pip cache purge \
+    && rm -rf /root/.cache/pip \
     && find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.11 -type d -name "tests" -exec rm -r {} + 2>/dev/null || true \
     && find /usr/local/lib/python3.11 -type f -name "*.pyc" -delete \
-    && find /usr/local/lib/python3.11 -type f -name "*.pyo" -delete
+    && find /usr/local/lib/python3.11 -type f -name "*.pyo" -delete \
+    && find /usr/local/lib/python3.11 -type f -name "*.whl" -delete
 
 # Copy application code
 COPY . .
