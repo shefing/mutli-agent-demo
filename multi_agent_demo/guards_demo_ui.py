@@ -9,21 +9,35 @@ This provides a visual interface to:
 - Compare different scenarios
 """
 
+print("="*80)
+print("GUARDS DEMO UI - STARTING IMPORTS")
+print("="*80)
+import time
+start_time = time.time()
+
 import streamlit as st
+print(f"✅ Streamlit imported ({time.time() - start_time:.2f}s)")
+
 import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+print(f"✅ Core libraries imported ({time.time() - start_time:.2f}s)")
 
 # Add parent directory to path for imports
 parent_dir = Path(__file__).parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
+print(f"📦 Importing scanners module... ({time.time() - start_time:.2f}s)")
 from multi_agent_demo.scanners import NEMO_GUARDRAILS_AVAILABLE, PRESIDIO_AVAILABLE
+print(f"✅ Scanners imported - NeMo: {NEMO_GUARDRAILS_AVAILABLE}, Presidio: {PRESIDIO_AVAILABLE} ({time.time() - start_time:.2f}s)")
+
+print(f"📦 Importing UI modules... ({time.time() - start_time:.2f}s)")
 from multi_agent_demo.scenarios import load_saved_scenarios
 from multi_agent_demo.ui import render_sidebar, render_conversation_builder, render_test_results
 from multi_agent_demo.firewall import initialize_firewall
+print(f"✅ UI modules imported ({time.time() - start_time:.2f}s)")
 
 # Load environment variables from .env file only
 load_dotenv()
@@ -169,4 +183,10 @@ def main():
 
 
 if __name__ == "__main__":
+    print(f"="*80)
+    print(f"🚀 STARTING MAIN APPLICATION ({time.time() - start_time:.2f}s)")
+    print(f"="*80)
     main()
+    print(f"="*80)
+    print(f"✅ APPLICATION READY ({time.time() - start_time:.2f}s)")
+    print(f"="*80)
