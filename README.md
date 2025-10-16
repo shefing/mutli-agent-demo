@@ -8,7 +8,6 @@ pinned: false
 license: gpl-3.0
 short_description: AI Agent Guards Testing - Security scanners for LLM agents
 app_port: 8501
-startup_duration_timeout: 3600
 ---
 
 # AI Agent Guards Testing Application
