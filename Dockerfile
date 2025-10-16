@@ -33,5 +33,5 @@ ENV STREAMLIT_SERVER_HEADLESS=true
 # Disable Python output buffering to see logs immediately
 ENV PYTHONUNBUFFERED=1
 
-# Run healthcheck first, then start app
-CMD python3 healthcheck.py && streamlit run multi_agent_demo/guards_demo_ui.py --server.enableCORS=false --server.enableXsrfProtection=false
+# Start Streamlit directly (healthcheck was passing but causing timeout)
+CMD streamlit run multi_agent_demo/guards_demo_ui.py --server.enableCORS=false --server.enableXsrfProtection=false
