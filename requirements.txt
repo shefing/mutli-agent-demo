@@ -18,8 +18,9 @@ llamafirewall>=1.0.3,<2.0.0
 # NeMo GuardRails for fact-checking, self-contradiction, and hallucination detection (with constraints)
 nemoguardrails>=0.16.0,<1.0.0
 
-# spaCy model required by NeMo GuardRails (3.8.0+ supports numpy 2.x)
-https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+# spaCy model required by NeMo GuardRails (using small model to save space: 15MB vs 800MB)
+# en_core_web_sm is sufficient for most NER and basic NLP tasks
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # Microsoft Presidio for PII detection in DataDisclosureGuard (2.2.356+ has numpy 2.x support)
 presidio-analyzer>=2.2.356,<3.0.0

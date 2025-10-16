@@ -35,8 +35,8 @@ except Exception as e:
 print("\n--- Checking spaCy model ---")
 try:
     import spacy
-    nlp = spacy.load("en_core_web_lg")
-    print(f"✅ spaCy model loaded: en_core_web_lg")
+    nlp = spacy.load("en_core_web_sm")
+    print(f"✅ spaCy model loaded: en_core_web_sm")
 except Exception as e:
     print(f"❌ spaCy model: {e}")
 
