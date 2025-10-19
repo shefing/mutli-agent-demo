@@ -124,7 +124,8 @@ def _render_message_display(index: int, msg: dict):
         with st.chat_message("user"):
             col_msg, col_btns = st.columns([4, 1])
             with col_msg:
-                st.write(msg["content"])
+                # Use st.text() which doesn't interpret markdown at all
+                st.text(msg["content"])
             with col_btns:
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
@@ -141,11 +142,13 @@ def _render_message_display(index: int, msg: dict):
             with col_msg:
                 if msg.get("action"):
                     st.write(f"**Action:** `{msg['action']}`")
-                    st.write(f"**Thought:** {msg['content']}")
+                    st.write("**Thought:**")
+                    st.text(msg["content"])
                     if msg.get("action_input"):
                         st.json(msg["action_input"])
                 else:
-                    st.write(msg["content"])
+                    # Use st.text() which doesn't interpret markdown at all
+                    st.text(msg["content"])
             with col_btns:
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
