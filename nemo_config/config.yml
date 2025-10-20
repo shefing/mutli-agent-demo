@@ -10,11 +10,25 @@ models:
 prompts:
   - task: self_check_facts
     content: |
-      Check if the following response contains false or fabricated information:
+      You are a fact-checking expert. Analyze the following response for false, fabricated, or unsubstantiated claims:
 
       {{ bot_response }}
 
-      Answer with "yes" if it contains false/fabricated claims, "no" if it's accurate.
+      CRITICAL CHECKS:
+      1. Specific statistics or percentages WITHOUT sources (e.g., "87% of cases..." without citation)
+      2. Invented data that cannot be verified
+      3. False claims about real-world facts
+      4. Fabricated numbers, dates, or measurements
+      5. Unsupported generalizations presented as facts
+
+      If the response contains ANY of the following, it is FALSE/FABRICATED:
+      - Specific percentages without evidence (e.g., "87% of...")
+      - Exact numbers that cannot be verified (e.g., "studies show 73%...")
+      - Made-up statistics
+      - Unverifiable claims stated as facts
+
+      Answer "yes" if it contains false/fabricated/unsourced claims, "no" if accurate.
+      Explain what specific claims are problematic and why (lack of evidence, fabricated statistics, etc.).
 
 rails:
   output:

@@ -115,9 +115,21 @@ class FactCheckerScanner(NemoGuardRailsScanner):
         try:
             print(f"🔍 FactChecker: Using NeMo's built-in fact-checking on: {message[:100]}...")
 
-            # Use NeMo in the simplest way possible - just generate with the message
+            # Create an explicit fact-checking prompt that emphasizes detecting fabricated statistics
+            fact_check_prompt = f"""Fact-check the following statement for false or fabricated claims:
+
+"{message}"
+
+CRITICAL: Check specifically for:
+- Unsourced statistics or percentages (e.g., "87% of..." without citation)
+- Specific numbers that cannot be verified
+- Made-up data presented as facts
+
+Does this contain any fabricated, false, or unsourced statistical claims? If YES, explain what is fabricated. If NO, explain why it's accurate."""
+
+            # Use NeMo with explicit fact-checking instruction
             response = self.rails.generate(
-                prompt=message
+                prompt=fact_check_prompt
             )
 
             print(f"🔍 NeMo response: {response}")
@@ -163,7 +175,21 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                     "don't reflect" in response_lower and ("real-world" in response_lower or "reality" in response_lower),
                     "not scientifically validated" in response_lower,
                     "vary widely" in response_lower and "unlikely" in response_lower,
-                    "claiming that" in response_lower and "not accurate" in response_lower
+                    "claiming that" in response_lower and "not accurate" in response_lower,
+                    # Fabricated statistics and unsourced claims
+                    "fabricated" in response_lower,
+                    "made up" in response_lower,
+                    "no evidence" in response_lower,
+                    "without evidence" in response_lower,
+                    "no source" in response_lower,
+                    "unsubstantiated" in response_lower,
+                    "without citation" in response_lower,
+                    "lacks evidence" in response_lower,
+                    "no basis" in response_lower,
+                    "cannot be verified" in response_lower,
+                    "no data" in response_lower and "support" in response_lower,
+                    "invented" in response_lower and ("statistic" in response_lower or "number" in response_lower or "percentage" in response_lower),
+                    "specific percentage" in response_lower and ("cannot" in response_lower or "no" in response_lower)
                 ]
 
                 if any(false_claim_indicators):
