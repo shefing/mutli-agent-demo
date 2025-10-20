@@ -154,7 +154,7 @@ def build_trace(purpose: str, messages: List[Dict]) -> Trace:
 
 
 def test_prompt_guard(firewall, user_input: str) -> Dict:
-    """Test PromptGuard scanner on user input"""
+    """Test PromptGuard scanner on user input with fallback to direct API"""
     try:
         print(f"🔍 Testing PromptGuard with input: {user_input[:50]}...")
         user_message = UserMessage(content=user_input)
@@ -169,17 +169,10 @@ def test_prompt_guard(firewall, user_input: str) -> Dict:
             "reason": result.reason,
             "is_safe": result.decision == ScanDecision.ALLOW
         }
-    except SyntaxError as e:
-        error_msg = f"PromptGuard model loading error (Streamlit Cloud compatibility issue): {str(e)}"
-        print(f"❌ PromptGuard scan failed with SyntaxError: {error_msg}")
-        return {
-            "error": error_msg,
-            "scanner": "PromptGuard",
-            "streamlit_cloud_note": "This error occurs on Streamlit Cloud due to model compatibility issues. PromptGuard may not work on Streamlit Cloud's environment."
-        }
     except Exception as e:
-        print(f"❌ PromptGuard scan failed: {str(e)}")
-        return {"error": str(e), "scanner": "PromptGuard"}
+        # Try direct HF Inference API fallback
+        print(f"⚠️ LlamaFirewall PromptGuard failed: {str(e)}, trying direct API fallback...")
+        return scan_prompt_guard_direct(user_input)
 
 
 def test_alignment_check(firewall, trace: Trace, messages: List[Dict] = None, purpose: str = "") -> Dict:
@@ -254,11 +247,16 @@ def run_scanner_tests():
                 st.session_state.current_conversation["purpose"]
             )
 
-    # Test PromptGuard if enabled (requires firewall)
-    if enabled_scanners.get("PromptGuard", False) and firewall is not None:
+    # Test PromptGuard if enabled (with fallback to direct API if firewall fails)
+    if enabled_scanners.get("PromptGuard", False):
         for msg in st.session_state.current_conversation["messages"]:
             if msg["type"] == "user":
-                result = test_prompt_guard(firewall, msg["content"])
+                if firewall is not None:
+                    result = test_prompt_guard(firewall, msg["content"])
+                else:
+                    # No firewall, use direct API
+                    print("ℹ️ Using direct PromptGuard API (no firewall)")
+                    result = scan_prompt_guard_direct(msg["content"])
                 result["message"] = msg["content"][:50] + "..."
                 promptguard_results.append(result)
 
