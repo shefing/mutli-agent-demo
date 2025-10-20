@@ -143,7 +143,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             if nemo_response and len(nemo_response) > 50:  # Substantial response
                 response_lower = nemo_response.lower()
 
-                # Look for indicators that NeMo found issues
+                # Look for indicators that NeMo found issues (expanded list)
                 false_claim_indicators = [
                     "inaccuracies" in response_lower,
                     "exaggerations" in response_lower,
@@ -153,7 +153,17 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                     "not feasible" in response_lower,
                     "rare for" in response_lower and "uniform" in response_lower,
                     "the assertion" in response_lower and "not" in response_lower,
-                    "the claim" in response_lower and ("incorrect" in response_lower or "wrong" in response_lower)
+                    "the claim" in response_lower and ("incorrect" in response_lower or "wrong" in response_lower),
+                    # Additional indicators based on actual NeMo responses
+                    "unlikely" in response_lower and ("highly" in response_lower or "quite" in response_lower),
+                    "improbable" in response_lower,
+                    "not accurate" in response_lower,
+                    "unrealistic" in response_lower,
+                    "lack a basis in reality" in response_lower,
+                    "don't reflect" in response_lower and ("real-world" in response_lower or "reality" in response_lower),
+                    "not scientifically validated" in response_lower,
+                    "vary widely" in response_lower and "unlikely" in response_lower,
+                    "claiming that" in response_lower and "not accurate" in response_lower
                 ]
 
                 if any(false_claim_indicators):
