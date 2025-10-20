@@ -311,59 +311,41 @@ def _render_control_buttons():
     with col_btn4:
         # Import scenario
         with st.popover("📥 Import Scenario", use_container_width=True):
-            import_method = st.radio(
-                "Import Method:",
-                ["Paste JSON", "Upload File"],
-                horizontal=True
+            uploaded_file = st.file_uploader(
+                "Choose scenario file (.json)",
+                type=['json'],
+                help="Upload a .json file exported from AI Guards Testing",
+                key="scenario_file_uploader"
             )
 
-            imported_data = None
+            if uploaded_file is not None:
+                try:
+                    imported_data = json.load(uploaded_file)
+                    st.success("✓ File loaded successfully")
 
-            if import_method == "Paste JSON":
-                json_input = st.text_area(
-                    "Paste scenario JSON here:",
-                    height=150,
-                    placeholder="Paste the exported scenario JSON..."
-                )
+                    # Validate the imported data
+                    required_fields = ['agent_purpose', 'messages']
+                    if all(field in imported_data for field in required_fields):
+                        st.write("**Preview:**")
+                        purpose_preview = imported_data['agent_purpose'][:100]
+                        if len(imported_data['agent_purpose']) > 100:
+                            purpose_preview += "..."
+                        st.write(f"**Purpose:** {purpose_preview}")
+                        st.write(f"**Messages:** {len(imported_data['messages'])}")
 
-                if json_input.strip():
-                    try:
-                        imported_data = json.loads(json_input)
-                        st.success("✓ Valid JSON format")
-                    except json.JSONDecodeError as e:
-                        st.error(f"❌ Invalid JSON: {str(e)}")
-
-            else:  # Upload File
-                uploaded_file = st.file_uploader(
-                    "Choose scenario file",
-                    type=['json'],
-                    help="Upload a .json file exported from AI Guards Testing"
-                )
-
-                if uploaded_file is not None:
-                    try:
-                        imported_data = json.load(uploaded_file)
-                        st.success("✓ File loaded successfully")
-                    except json.JSONDecodeError as e:
-                        st.error(f"❌ Invalid JSON file: {str(e)}")
-
-            if imported_data:
-                # Validate the imported data
-                required_fields = ['agent_purpose', 'messages']
-                if all(field in imported_data for field in required_fields):
-                    st.write("**Preview:**")
-                    st.write(f"Purpose: {imported_data['agent_purpose'][:100]}...")
-                    st.write(f"Messages: {len(imported_data['messages'])}")
-
-                    if st.button("✓ Import Scenario", type="primary", use_container_width=True):
-                        # Load the scenario into current conversation
-                        st.session_state.current_conversation = {
-                            "purpose": imported_data['agent_purpose'],
-                            "messages": imported_data['messages']
-                        }
-                        # Clear any existing test results
-                        st.session_state.test_results = []
-                        st.success("✓ Scenario imported successfully!")
-                        st.rerun()
-                else:
-                    st.error("❌ Invalid scenario format. Missing required fields: agent_purpose, messages")
+                        if st.button("✓ Import Scenario", type="primary", use_container_width=True):
+                            # Load the scenario into current conversation
+                            st.session_state.current_conversation = {
+                                "purpose": imported_data['agent_purpose'],
+                                "messages": imported_data['messages']
+                            }
+                            # Clear any existing test results
+                            st.session_state.test_results = []
+                            st.success("✓ Scenario imported successfully!")
+                            st.rerun()
+                    else:
+                        st.error("❌ Invalid scenario format. Missing required fields: agent_purpose, messages")
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ Invalid JSON file: {str(e)}")
+            else:
+                st.info("📁 Upload a JSON file to import a scenario")
