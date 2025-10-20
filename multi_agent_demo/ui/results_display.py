@@ -31,7 +31,7 @@ def _render_result_summary(result: dict):
     for pg in result.get("prompt_guard", []):
         if "error" not in pg:
             if not pg["is_safe"]:
-                warning_count += 1
+                blocked_count += 1  # Changed from warning_count to blocked_count
             else:
                 safe_count += 1
         else:
@@ -147,7 +147,7 @@ def _render_prompt_guard_results(result: dict):
                 if pg_result["is_safe"]:
                     st.success(f"✅ Safe: {pg_result['message']}")
                 else:
-                    st.warning(f"⚠️ Risk detected: {pg_result['message']}")
+                    st.error(f"🚫 Blocked: {pg_result['message']}")
                 st.caption(f"Score: {pg_result.get('score', 'N/A')} | Decision: {pg_result.get('decision', 'N/A')}")
             else:
                 # Check if this is a Streamlit Cloud compatibility issue
