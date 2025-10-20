@@ -68,6 +68,26 @@ class DataDisclosureGuardScanner:
                 context=["credit card", "card number", "cc"]
             )
 
+            # Create custom recognizer for business financial data
+            financial_patterns = [
+                Pattern(
+                    name="annual_revenue",
+                    regex=r"(?:Annual Revenue|Revenue|Annual_Revenue):\s*\$[\d,]+",
+                    score=0.8
+                ),
+                Pattern(
+                    name="revenue_disclosure",
+                    regex=r"\$[\d,]{6,}",  # Large dollar amounts (6+ digits)
+                    score=0.5  # Lower confidence for plain numbers
+                ),
+            ]
+
+            financial_recognizer = PatternRecognizer(
+                supported_entity="FINANCIAL_INFO",
+                patterns=financial_patterns,
+                context=["revenue", "annual revenue", "customer annual revenue", "financial"]
+            )
+
             # Initialize analyzer without spaCy (pattern-based only)
             # This avoids spaCy installation issues on Streamlit Cloud
             try:
@@ -81,20 +101,21 @@ class DataDisclosureGuardScanner:
             # Add custom recognizers
             self.analyzer.registry.add_recognizer(ssn_recognizer)
             self.analyzer.registry.add_recognizer(cc_recognizer)
+            self.analyzer.registry.add_recognizer(financial_recognizer)
 
-            # Remove or deprioritize DATE_TIME recognizer
-            # This prevents XXX-XX-XXXX patterns from being detected as dates
+            # Remove problematic recognizers that cause false positives
             try:
                 # Get all recognizers
                 recognizers = self.analyzer.registry.recognizers
-                # Remove DATE_TIME recognizer if it exists
+                # Remove DATE_TIME and US_DRIVER_LICENSE recognizers
                 self.analyzer.registry.recognizers = [
                     r for r in recognizers
-                    if not (hasattr(r, 'supported_entities') and 'DATE_TIME' in r.supported_entities)
+                    if not (hasattr(r, 'supported_entities') and
+                           ('DATE_TIME' in r.supported_entities or 'US_DRIVER_LICENSE' in r.supported_entities))
                 ]
-                print("✅ Removed DATE_TIME recognizer to prevent false positives")
+                print("✅ Removed DATE_TIME and US_DRIVER_LICENSE recognizers to prevent false positives")
             except Exception as e:
-                print(f"⚠️ Could not remove DATE_TIME recognizer: {e}")
+                print(f"⚠️ Could not remove problematic recognizers: {e}")
 
             self.presidio_available = True
             print("✅ Presidio Analyzer loaded for DataDisclosureGuard with custom recognizers")
@@ -122,16 +143,16 @@ class DataDisclosureGuardScanner:
 
         try:
             # Analyze text for PII with custom recognizers
-            # DATE_TIME recognizer has been removed to prevent false positives
+            # DATE_TIME and US_DRIVER_LICENSE recognizers removed to prevent false positives
             # We exclude URL because it creates false positives with email addresses
             results = self.analyzer.analyze(
                 text=text,
                 language='en',
-                entities=[  # Explicitly list entities to avoid URL false positives
+                entities=[  # Explicitly list entities to avoid false positives
                     "CREDIT_CARD", "US_SSN", "US_BANK_NUMBER", "US_ITIN",
                     "US_PASSPORT", "EMAIL_ADDRESS", "PHONE_NUMBER", "PERSON",
                     "LOCATION", "IBAN_CODE", "CRYPTO", "IP_ADDRESS",
-                    "US_DRIVER_LICENSE", "NRP"  # Exclude URL and DATE_TIME
+                    "NRP", "FINANCIAL_INFO"  # Exclude URL, DATE_TIME, and US_DRIVER_LICENSE
                 ]
             )
 
@@ -319,20 +340,47 @@ Determine if this PII collection is aligned with the user's intent."""
                     finding["alignment_check"] = alignment_result
                     finding["is_aligned"] = is_aligned
 
-            # Step 3: Determine overall decision
+            # Step 3: Determine overall decision with examples
             if not is_aligned and all_pii_findings:
                 # Found PII disclosure that's NOT aligned with intent → HUMAN_IN_THE_LOOP
                 decision = "HUMAN_IN_THE_LOOP"
                 is_safe = False
                 score = 0.9  # High risk
-                pii_types = set([e["type"] for e in all_pii_entities])
-                reason = f"⚠️ HUMAN REVIEW REQUIRED: Detected disclosure of {', '.join(pii_types)} that appears misaligned with user intent. {alignment_result.get('reason', '')[:200]}"
+
+                # Build examples of each PII type detected
+                pii_examples = {}
+                for entity in all_pii_entities:
+                    pii_type = entity["type"]
+                    if pii_type not in pii_examples:
+                        # Store first example of each type
+                        example_text = entity["text"]
+                        # Truncate long examples
+                        if len(example_text) > 40:
+                            example_text = example_text[:37] + "..."
+                        pii_examples[pii_type] = example_text
+
+                # Format examples for display
+                examples_str = ", ".join([f"{pii_type} (e.g., {example})" for pii_type, example in pii_examples.items()])
+
+                reason = f"⚠️ HUMAN REVIEW REQUIRED: Detected disclosure of {examples_str} that appears misaligned with user intent. {alignment_result.get('reason', '')[:200]}"
             elif all_pii_findings:
                 # Found PII but all aligned with intent → ALLOW with note
                 decision = "ALLOW"
                 is_safe = True
                 score = 0.3  # Low risk (PII present but appropriate)
-                reason = f"PII detected ({len(all_pii_findings)} instances) but aligned with user intent."
+
+                # Build examples of each PII type detected
+                pii_examples = {}
+                for entity in all_pii_entities:
+                    pii_type = entity["type"]
+                    if pii_type not in pii_examples:
+                        example_text = entity["text"]
+                        if len(example_text) > 40:
+                            example_text = example_text[:37] + "..."
+                        pii_examples[pii_type] = example_text
+
+                examples_str = ", ".join([f"{pii_type} (e.g., {example})" for pii_type, example in pii_examples.items()])
+                reason = f"PII detected: {examples_str}. All aligned with user intent."
             else:
                 # No PII found → ALLOW
                 decision = "ALLOW"
