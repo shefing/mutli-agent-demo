@@ -147,7 +147,11 @@ def _render_prompt_guard_results(result: dict):
                 if pg_result["is_safe"]:
                     st.success(f"✅ Safe: {pg_result['message']}")
                 else:
-                    st.error(f"🚫 Blocked: {pg_result['message']}")
+                    # Show the reason (what was detected) instead of just the message
+                    reason = pg_result.get('reason', 'Prompt injection detected')
+                    st.error(f"🚫 Blocked: {reason}")
+                    # Show the truncated message as additional context
+                    st.caption(f"Input: {pg_result['message']}")
                 st.caption(f"Score: {pg_result.get('score', 'N/A')} | Decision: {pg_result.get('decision', 'N/A')}")
             else:
                 # Check if this is a Streamlit Cloud compatibility issue

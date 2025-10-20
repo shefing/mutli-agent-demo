@@ -202,13 +202,51 @@ def scan_prompt_guard_direct(user_input: str) -> Dict:
         matches = [pattern for pattern in suspicious_patterns if pattern in user_input_lower]
 
         if matches:
-            # Found suspicious patterns
+            # Found suspicious patterns - extract context snippets
+            context_snippets = []
+            for pattern in matches[:3]:  # Show up to 3 matches
+                # Find the pattern in the original text (case-insensitive)
+                pattern_index = user_input_lower.find(pattern)
+                if pattern_index != -1:
+                    # Extract surrounding context (up to 50 chars before and after)
+                    start = max(0, pattern_index - 20)
+                    end = min(len(user_input), pattern_index + len(pattern) + 30)
+
+                    # Adjust start to not cut words - find previous space
+                    if start > 0:
+                        # Look backwards for word boundary (space or punctuation)
+                        while start > 0 and user_input[start - 1] not in ' \n\t.,;:!?':
+                            start -= 1
+
+                    # Adjust end to not cut words - find next space
+                    if end < len(user_input):
+                        # Look forwards for word boundary (space or punctuation)
+                        while end < len(user_input) and user_input[end] not in ' \n\t.,;:!?':
+                            end += 1
+
+                    # Get the snippet from the original text (preserving case)
+                    snippet = user_input[start:end].strip()
+
+                    # Add ellipsis if we truncated
+                    if start > 0:
+                        snippet = "..." + snippet
+                    if end < len(user_input):
+                        snippet = snippet + "..."
+
+                    context_snippets.append(f'"{snippet}"')
+
+            # Build reason with context
+            if context_snippets:
+                reason = f"Detected prompt injection attempt: {context_snippets[0]}"
+            else:
+                reason = f"Detected potential prompt injection patterns: {', '.join(matches[:3])}"
+
             score = min(0.9, 0.5 + (len(matches) * 0.1))  # Higher score for more matches
             return {
                 "scanner": "PromptGuard",
                 "decision": "BLOCK",
                 "score": score,
-                "reason": f"Detected potential prompt injection patterns: {', '.join(matches[:3])}",
+                "reason": reason,
                 "is_safe": False,
                 "method": "heuristic"
             }
