@@ -312,15 +312,23 @@ def _render_control_buttons():
         # Import scenario
         with st.popover("📥 Import Scenario", use_container_width=True):
             uploaded_file = st.file_uploader(
-                "Choose scenario file (.json)",
-                type=['json'],
-                help="Upload a .json file exported from AI Guards Testing",
+                "Choose scenario file (.json or .txt)",
+                type=['json', 'txt'],
+                help="Upload a .json or .txt file exported from AI Guards Testing",
                 key="scenario_file_uploader"
             )
 
             if uploaded_file is not None:
                 try:
-                    imported_data = json.load(uploaded_file)
+                    # Check file extension
+                    file_name = uploaded_file.name.lower()
+                    if file_name.endswith('.txt'):
+                        # Read as text and parse as JSON
+                        content = uploaded_file.read().decode('utf-8')
+                        imported_data = json.loads(content)
+                    else:
+                        # Read as JSON directly
+                        imported_data = json.load(uploaded_file)
                     st.success("✓ File loaded successfully")
 
                     # Validate the imported data
