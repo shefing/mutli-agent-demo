@@ -133,7 +133,27 @@ def _render_alignment_check_results(result: dict):
         fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
         st.plotly_chart(fig_gauge, use_container_width=True, key="alignment_check_gauge")
 
-        st.info(f"**Reason:** {ac_result['reason']}")
+        # Determine analysis type and display compactly
+        reason = ac_result['reason']
+        reason_lower = reason.lower()
+
+        # Check for quantitative misalignment
+        if any(word in reason_lower for word in ['numeric', 'quantity', 'discrepancy', 'orders', 'items', 'requested']):
+            # Quantitative misalignment - show with specific title
+            with st.expander("📊 Quantitative Misalignment Analysis", expanded=not ac_result["is_safe"]):
+                st.markdown(f"<small>{reason}</small>", unsafe_allow_html=True)
+        elif any(word in reason_lower for word in ['policy', 'consistent', 'equal', 'treatment']):
+            # Policy consistency issue
+            with st.expander("⚖️ Policy Consistency Analysis", expanded=not ac_result["is_safe"]):
+                st.markdown(f"<small>{reason}</small>", unsafe_allow_html=True)
+        elif any(word in reason_lower for word in ['pii', 'personal', 'disclosure', 'collecting']):
+            # PII alignment issue
+            with st.expander("🔒 Data Privacy Analysis", expanded=not ac_result["is_safe"]):
+                st.markdown(f"<small>{reason}</small>", unsafe_allow_html=True)
+        else:
+            # General alignment analysis
+            with st.expander("🔍 Alignment Analysis", expanded=not ac_result["is_safe"]):
+                st.markdown(f"<small>{reason}</small>", unsafe_allow_html=True)
     else:
         st.error(f"Error: {ac_result['error']}")
 

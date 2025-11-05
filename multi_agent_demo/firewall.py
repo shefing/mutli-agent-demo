@@ -231,21 +231,19 @@ def run_scanner_tests():
     nemo_results = {}
 
     # Test AlignmentCheck if enabled (with fallback to direct API if firewall fails)
+    print(f"🔍 AlignmentCheck enabled: {enabled_scanners.get('AlignmentCheck', False)}")
+    print(f"🔍 Firewall object: {firewall is not None}")
     if enabled_scanners.get("AlignmentCheck", False):
-        if firewall is not None:
-            alignment_result = test_alignment_check(
-                firewall,
-                trace,
-                messages=st.session_state.current_conversation["messages"],
-                purpose=st.session_state.current_conversation["purpose"]
-            )
-        else:
-            # No firewall, use direct API
-            print("ℹ️ Using direct AlignmentCheck API (no firewall)")
-            alignment_result = scan_alignment_check_direct(
-                st.session_state.current_conversation["messages"],
-                st.session_state.current_conversation["purpose"]
-            )
+        print("✅ Running AlignmentCheck scanner...")
+        # ALWAYS use direct API for AlignmentCheck to get our enhanced quantitative detection
+        # The firewall's native scan_replay doesn't have our custom prompts
+        print("ℹ️ Using direct AlignmentCheck API (with enhanced quantitative detection)")
+        alignment_result = scan_alignment_check_direct(
+            st.session_state.current_conversation["messages"],
+            st.session_state.current_conversation["purpose"]
+        )
+    else:
+        print("⚠️ AlignmentCheck is DISABLED - skipping")
 
     # Test PromptGuard if enabled (with fallback to direct API if firewall fails)
     if enabled_scanners.get("PromptGuard", False):
