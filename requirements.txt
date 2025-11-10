@@ -19,16 +19,18 @@ llamafirewall>=1.0.3,<2.0.0
 # NeMo GuardRails for fact-checking, self-contradiction, and hallucination detection (with constraints)
 nemoguardrails>=0.16.0,<1.0.0
 
-# spaCy model required by NeMo GuardRails (3.8.0+ supports numpy 2.x)
-# Using small model to reduce install size: 15MB vs 800MB
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+# spaCy model required by NeMo GuardRails
+# NOTE: Commented out for Streamlit Cloud Python 3.13 compatibility
+# The app will download this at runtime if needed, or fall back to pattern-only mode
+# https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # Microsoft Presidio for PII detection in DataDisclosureGuard (2.2.356+ has numpy 2.x support)
 presidio-analyzer>=2.2.356,<3.0.0
 presidio-anonymizer>=2.2.356,<3.0.0
 
-# Note: spaCy models are optional for Presidio
-# Pattern-based recognizers (SSN, credit cards) work without spaCy
+# Note: spaCy models are optional for Presidio and NeMo
+# Pattern-based recognizers (SSN, credit cards, fact-checking) work without spaCy
+# This makes the app compatible with Streamlit Cloud's restricted environment
 
 # Additional constraints to help dependency resolution
 click>=8.0.0,<9.0.0
