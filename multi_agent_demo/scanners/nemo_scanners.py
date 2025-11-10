@@ -38,6 +38,11 @@ class FactCheckerScanner(NemoGuardRailsScanner):
         """Initialize with proper NeMo GuardRails configuration"""
         if NEMO_GUARDRAILS_AVAILABLE:
             try:
+                # CRITICAL: Disable spaCy model downloads to avoid permission errors on Streamlit Cloud
+                os.environ['SPACY_MODEL_DISABLED'] = '1'
+                # Disable NeMo's automatic model downloads
+                os.environ['NEMOGUARDRAILS_DISABLE_MODELS'] = '1'
+
                 print("🔧 FactChecker: Attempting to load NeMo GuardRails config...")
 
                 # Check if config directory exists
