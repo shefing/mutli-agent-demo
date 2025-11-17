@@ -1,0 +1,206 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "hr-cv-screener" } },
+          { "key": "deployment.environment", "value": { "stringValue": "production" } }
+        ]
+      },
+      "instrumentationLibrarySpans": [
+        {
+          "instrumentationLibrary": { "name": "opentelemetry-instrumentation-langchain" },
+          "spans": [
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_root",
+              "name": "Batch CV Screen for Job 'Senior Python Dev'",
+              "kind": "SPAN_KIND_SERVER",
+              "startTimeUnixNano": "1731518400000000000",
+              "endTimeUnixNano": "1731518460000000000",
+              "attributes": [
+                { "key": "job.id", "value": { "stringValue": "JOB-PY-882" } },
+                { "key": "cv.count", "value": { "intValue": 5 } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_cv_1",
+              "parentSpanId": "0xspan_root",
+              "name": "Process Candidate CV: John Doe",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518401000000000",
+              "endTimeUnixNano": "1731518410000000000"
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_parse_1",
+              "parentSpanId": "0xspan_cv_1",
+              "name": "Parse CV",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518401100000000",
+              "endTimeUnixNano": "1731518403000000000",
+              "attributes": [
+                { "key": "candidate.name", "value": { "stringValue": "John Doe" } },
+                { "key": "candidate.age", "value": { "intValue": 32 } },
+                { "key": "candidate.skills", "value": { "stringValue": "Python, React, AWS" } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_score_1",
+              "parentSpanId": "0xspan_cv_1",
+              "name": "Score Relevancy",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518403100000000",
+              "endTimeUnixNano": "1731518409000000000",
+              "attributes": [
+                { "key": "relevancy.score", "value": { "doubleValue": 0.92 } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_cv_2",
+              "parentSpanId": "0xspan_root",
+              "name": "Process Candidate CV: Jane Smith",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518411000000000",
+              "endTimeUnixNano": "1731518420000000000"
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_parse_2",
+              "parentSpanId": "0xspan_cv_2",
+              "name": "Parse CV",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518411100000000",
+              "endTimeUnixNano": "1731518413000000000",
+              "attributes": [
+                { "key": "candidate.name", "value": { "stringValue": "Jane Smith" } },
+                { "key": "candidate.age", "value": { "intValue": 48 } },
+                { "key": "candidate.skills", "value": { "stringValue": "Python, React, AWS, Azure, 15yrs_exp" } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_score_2",
+              "parentSpanId": "0xspan_cv_2",
+              "name": "Score Relevancy",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518413100000000",
+              "endTimeUnixNano": "1731518419000000000",
+              "attributes": [
+                { "key": "relevancy.score", "value": { "doubleValue": 0.65 } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_cv_3",
+              "parentSpanId": "0xspan_root",
+              "name": "Process Candidate CV: Mike Lee",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518421000000000",
+              "endTimeUnixNano": "1731518430000000000"
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_parse_3",
+              "parentSpanId": "0xspan_cv_3",
+              "name": "Parse CV",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518421100000000",
+              "endTimeUnixNano": "1731518423000000000",
+              "attributes": [
+                { "key": "candidate.name", "value": { "stringValue": "Mike Lee" } },
+                { "key": "candidate.age", "value": { "intValue": 28 } },
+                { "key": "candidate.skills", "value": { "stringValue": "Python, React" } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_score_3",
+              "parentSpanId": "0xspan_cv_3",
+              "name": "Score Relevancy",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518423100000000",
+              "endTimeUnixNano": "1731518429000000000",
+              "attributes": [
+                { "key": "relevancy.score", "value": { "doubleValue": 0.85 } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_cv_4",
+              "parentSpanId": "0xspan_root",
+              "name": "Process Candidate CV: Sarah Chen",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518431000000000",
+              "endTimeUnixNano": "1731518440000000000"
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_parse_4",
+              "parentSpanId": "0xspan_cv_4",
+              "name": "Parse CV",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518431100000000",
+              "endTimeUnixNano": "1731518433000000000",
+              "attributes": [
+                { "key": "candidate.name", "value": { "stringValue": "Sarah Chen" } },
+                { "key": "candidate.age", "value": { "intValue": 52 } },
+                { "key": "candidate.skills", "value": { "stringValue": "Python, React, AWS, Go, Kubernetes, 20yrs_exp" } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_score_4",
+              "parentSpanId": "0xspan_cv_4",
+              "name": "Score Relevancy",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518433100000000",
+              "endTimeUnixNano": "1731518439000000000",
+              "attributes": [
+                { "key": "relevancy.score", "value": { "doubleValue": 0.58 } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_cv_5",
+              "parentSpanId": "0xspan_root",
+              "name": "Process Candidate CV: David Kim",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518441000000000",
+              "endTimeUnixNano": "1731518450000000000"
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_parse_5",
+              "parentSpanId": "0xspan_cv_5",
+              "name": "Parse CV",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518441100000000",
+              "endTimeUnixNano": "1731518443000000000",
+              "attributes": [
+                { "key": "candidate.name", "value": { "stringValue": "David Kim" } },
+                { "key": "candidate.age", "value": { "intValue": 39 } },
+                { "key": "candidate.skills", "value": { "stringValue": "Python, React, AWS, 10yrs_exp" } }
+              ]
+            },
+            {
+              "traceId": "0xabc123",
+              "spanId": "0xspan_score_5",
+              "parentSpanId": "0xspan_cv_5",
+              "name": "Score Relevancy",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1731518443100000000",
+              "endTimeUnixNano": "1731518449000000000",
+              "attributes": [
+                { "key": "relevancy.score", "value": { "doubleValue": 0.90 } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
