@@ -40,10 +40,6 @@ def render_otel_upload():
             # Display basic statistics
             st.success(f"✅ OTEL data loaded successfully")
 
-            # Show preview
-            with st.expander("📊 Data Preview", expanded=False):
-                st.json(otel_data if len(str(otel_data)) < 5000 else {"preview": "Large file - showing structure only", "keys": list(otel_data.keys()) if isinstance(otel_data, dict) else "List data"})
-
             return otel_data
 
         except json.JSONDecodeError as e:
