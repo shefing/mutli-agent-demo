@@ -31,8 +31,8 @@ def render_otel_upload():
             if 'current_otel_file' not in st.session_state or st.session_state.current_otel_file != uploaded_file.name:
                 st.session_state.current_otel_file = uploaded_file.name
                 # Clear previous analysis results
-                st.session_state.deviation_results = []
-                st.session_state.bias_results = []
+                st.session_state.deviation_results = None
+                st.session_state.bias_results = None
 
             # Store in session state
             st.session_state.otel_data = otel_data
@@ -61,8 +61,8 @@ def render_otel_upload():
             st.session_state.otel_data = sample_data
             st.session_state.current_otel_file = "sample_data"
             # Clear previous analysis results
-            st.session_state.deviation_results = []
-            st.session_state.bias_results = []
+            st.session_state.deviation_results = None
+            st.session_state.bias_results = None
             st.rerun()
 
     return st.session_state.otel_data
@@ -246,13 +246,14 @@ def render():
 
             with col_btn2:
                 if st.button("🗑️ Clear Analysis", use_container_width=True):
-                    st.session_state.deviation_results = []
-                    st.session_state.bias_results = []
+                    st.session_state.deviation_results = None
+                    st.session_state.bias_results = None
                     st.rerun()
 
     with col2:
         # Results display
-        if st.session_state.deviation_results or st.session_state.bias_results:
+        # Check if analysis has been run (results exist, even if empty)
+        if st.session_state.deviation_results is not None and st.session_state.bias_results is not None:
             render_deviation_results(
                 st.session_state.deviation_results,
                 st.session_state.bias_results

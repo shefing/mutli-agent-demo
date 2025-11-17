@@ -150,10 +150,10 @@ def initialize_session_state():
         st.session_state.otel_data = None
 
     if "deviation_results" not in st.session_state:
-        st.session_state.deviation_results = []
+        st.session_state.deviation_results = None
 
     if "bias_results" not in st.session_state:
-        st.session_state.bias_results = []
+        st.session_state.bias_results = None
 
 
 def render_page_navigation():
