@@ -1,0 +1,34 @@
+{
+  "profile": "data-package",
+  "resources": [
+    {
+      "name": "pages.jsonl",
+      "path": "pages/pages.jsonl",
+      "hash": "sha256:5c730810c4798e922740d6a39f5f85f60a41511738b5874f459e6b616aef9605",
+      "bytes": 3299
+    },
+    {
+      "name": "data.warc.gz",
+      "path": "archive/data.warc.gz",
+      "hash": "sha256:d3a698360ef51c0f95a4894a6e5b6801a4dbff87993ba1dd2d000aa94a0aba2a",
+      "bytes": 138183558
+    },
+    {
+      "name": "index.cdx.gz",
+      "path": "indexes/index.cdx.gz",
+      "hash": "sha256:34b0e2195216bdaf7fbae345eeace3c84405e1d802e24de7c248534b0feb53e2",
+      "bytes": 46088
+    },
+    {
+      "name": "index.idx",
+      "path": "indexes/index.idx",
+      "hash": "sha256:7f7e18609ba7f322d38f6fbaf3967fb8bdc39d812273cb1fecc23b5d2b8e1646",
+      "bytes": 189
+    }
+  ],
+  "wacz_version": "1.1.1",
+  "title": "My Web Archive",
+  "software": "Webrecorder ArchiveWeb.page 1.0.0, using warcio.js 1.6.2",
+  "created": "2022-12-12T11:35:44.041Z",
+  "modified": "2022-12-12T15:25:50.112Z"
+}
