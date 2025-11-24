@@ -28,6 +28,7 @@ def detect_bias(
         List of bias findings with severity, description, and statistical evidence
     """
     bias_findings = []
+    main_bias_findings = []  # Track main findings separately
 
     parameter_groups = parsed_data["parameter_groups"]
     metrics = parsed_data["metrics"]
@@ -103,14 +104,17 @@ def detect_bias(
                 # This filters out "request_type affects fee" (expected) but keeps age bias
                 if bias_pattern.get('is_protected_attribute') or bias_pattern.get('severity_score', 0) > 0.8:
                     bias_findings.append(bias_pattern)
+                    main_bias_findings.append(bias_pattern)
 
     # Detect intersectional bias (combinations of parameters)
+    # Pass main findings to filter out redundant intersectional patterns
     intersectional_bias = _detect_intersectional_bias(
         parsed_data,
         metrics,
         parameter_groups,
         threshold,
-        agent_purpose
+        agent_purpose,
+        main_bias_findings
     )
     bias_findings.extend(intersectional_bias)
 
@@ -130,7 +134,8 @@ def _identify_protected_attributes(parameter_groups: Dict) -> List[str]:
     protected_keywords = [
         "age", "gender", "sex", "race", "ethnicity", "ethnic", "religion",
         "disability", "disabled", "national", "origin", "country",
-        "marital", "married", "veteran", "orientation", "lgbt"
+        "marital", "married", "veteran", "orientation", "lgbt",
+        "language", "lang", "native", "zip", "income", "geographic", "location"
     ]
 
     protected = []
@@ -195,6 +200,13 @@ def _detect_bias_pattern(
 
     highest_mean = highest_group[1]["mean"]
     lowest_mean = lowest_group[1]["mean"]
+    highest_count = highest_group[1]["count"]
+    lowest_count = lowest_group[1]["count"]
+
+    # Filter out findings where either group has only 1 sample
+    # Single-sample groups are not statistically meaningful
+    if highest_count == 1 or lowest_count == 1:
+        return None
 
     # Calculate effect size (Cohen's d)
     stdevs = [g["stdev"] for _, g in sorted_groups if g["stdev"] > 0]
@@ -265,8 +277,10 @@ def _detect_bias_pattern(
         "details": {
             "advantaged_group": str(highest_group[0]),
             "advantaged_mean": round(highest_mean, 2),
+            "advantaged_count": highest_count,
             "disadvantaged_group": str(lowest_group[0]),
             "disadvantaged_mean": round(lowest_mean, 2),
+            "disadvantaged_count": lowest_count,
             "disparity_ratio": round(disparity_ratio, 2),
             "percent_difference": round(percent_diff, 2),
             "cohens_d": round(cohens_d, 2),
@@ -285,25 +299,38 @@ def _detect_intersectional_bias(
     metrics: Dict[str, List[float]],
     parameter_groups: Dict,
     threshold: float,
-    agent_purpose: str
+    agent_purpose: str,
+    main_bias_findings: List[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """
     Detect bias patterns involving combinations of parameters
     (intersectional bias)
 
+    Only reports intersectional findings that show significantly larger
+    disparities than the individual parameters alone (at least 50% larger).
+
     Example: Age + Gender interactions affecting scores
     """
     intersectional_findings = []
 
+    if main_bias_findings is None:
+        main_bias_findings = []
+
     # Only check combinations of protected attributes
     protected = _identify_protected_attributes(parameter_groups)
 
-    if len(protected) < 2:
+    # Filter out identifier parameters from intersectional analysis
+    protected_filtered = [
+        p for p in protected
+        if not _is_identifier_parameter(p, parameter_groups.get(p, {}))
+    ]
+
+    if len(protected_filtered) < 2:
         return intersectional_findings
 
     # Check pairs of protected attributes (limit to avoid combinatorial explosion)
-    for i, param1 in enumerate(protected[:3]):  # Limit to first 3
-        for param2 in protected[i+1:4]:  # Check combinations
+    for i, param1 in enumerate(protected_filtered[:3]):  # Limit to first 3
+        for param2 in protected_filtered[i+1:4]:  # Check combinations
             # Create intersectional groups
             intersectional_groups = _create_intersectional_groups(
                 parsed_data["traces"],
@@ -330,6 +357,10 @@ def _detect_intersectional_bias(
                         highest = sorted_groups[0]
                         lowest = sorted_groups[-1]
 
+                        # Filter out single-sample groups (same as main bias detection)
+                        if highest[1]["count"] < 2 or lowest[1]["count"] < 2:
+                            continue
+
                         pooled_stdev = statistics.mean(
                             [g["stdev"] for _, g in sorted_groups if g["stdev"] > 0]
                         ) if any(g["stdev"] > 0 for _, g in sorted_groups) else 0
@@ -339,6 +370,24 @@ def _detect_intersectional_bias(
 
                             if cohens_d > threshold * 1.2:  # Higher threshold for intersectional
                                 disparity_ratio = highest[1]["mean"] / lowest[1]["mean"] if lowest[1]["mean"] != 0 else float('inf')
+
+                                # Require minimum disparity of 1.5x for intersectional findings
+                                # (1.01x like the credit_score example is meaningless)
+                                if disparity_ratio < 1.5:
+                                    continue
+
+                                # Check if this intersectional finding adds value beyond main findings
+                                # Only report if disparity is much larger (2x) than individual parameters
+                                is_meaningful = _is_meaningful_intersectional(
+                                    metric_name,
+                                    param1,
+                                    param2,
+                                    disparity_ratio,
+                                    main_bias_findings
+                                )
+
+                                if not is_meaningful:
+                                    continue
 
                                 intersectional_findings.append({
                                     "type": "intersectional_bias",
@@ -351,8 +400,10 @@ def _detect_intersectional_bias(
                                     "details": {
                                         "advantaged_group": str(highest[0]),
                                         "advantaged_mean": round(highest[1]["mean"], 2),
+                                        "advantaged_count": highest[1]["count"],
                                         "disadvantaged_group": str(lowest[0]),
                                         "disadvantaged_mean": round(lowest[1]["mean"], 2),
+                                        "disadvantaged_count": lowest[1]["count"],
                                         "disparity_ratio": round(disparity_ratio, 2),
                                         "cohens_d": round(cohens_d, 2)
                                     },
@@ -361,6 +412,44 @@ def _detect_intersectional_bias(
                                 })
 
     return intersectional_findings
+
+
+def _is_meaningful_intersectional(
+    metric_name: str,
+    param1: str,
+    param2: str,
+    intersectional_disparity: float,
+    main_bias_findings: List[Dict[str, Any]]
+) -> bool:
+    """
+    Check if an intersectional finding adds meaningful information
+    beyond the individual parameter findings.
+
+    Returns True only if the intersectional disparity is at least 50% larger
+    than the maximum disparity from the individual parameters.
+    """
+    if not main_bias_findings:
+        return True
+
+    # Find the maximum disparity for this metric from individual parameters
+    max_individual_disparity = 0.0
+
+    for finding in main_bias_findings:
+        # Check if this finding involves the same metric and either parameter
+        if finding.get("metric") == metric_name:
+            param = finding.get("parameter")
+            if param == param1 or param == param2:
+                disparity = finding.get("details", {}).get("disparity_ratio", 0)
+                max_individual_disparity = max(max_individual_disparity, disparity)
+
+    # Intersectional finding must be at least 100% larger (2x) than individual findings
+    # This ensures we only report truly amplified intersectional effects
+    if max_individual_disparity > 0:
+        improvement = (intersectional_disparity - max_individual_disparity) / max_individual_disparity
+        return improvement >= 1.0  # At least 2x (100% larger)
+
+    # If no individual finding exists, still require meaningful disparity (>1.2x)
+    return intersectional_disparity >= 1.2
 
 
 def _create_intersectional_groups(
@@ -393,14 +482,41 @@ def _generate_bias_description(
     """
     Generate human-readable description of the bias
     """
+    # Make metric names more human-readable
+    metric_display = _humanize_metric_name(metric_name)
+
     if disparity_ratio == float('inf'):
-        return f"⚠️ {param_name}={advantaged_group} receives {metric_name} while {param_name}={disadvantaged_group} receives none"
+        return f"⚠️ {param_name}={advantaged_group} receives {metric_display} while {param_name}={disadvantaged_group} receives none"
 
     ratio_text = f"{disparity_ratio:.1f}x" if disparity_ratio < 10 else f"{disparity_ratio:.0f}x"
 
     protection_flag = "🚨 " if is_protected else ""
 
-    return f"{protection_flag}{param_name}={advantaged_group} has {ratio_text} higher {metric_name} than {param_name}={disadvantaged_group}"
+    return f"{protection_flag}{param_name}={advantaged_group} has {ratio_text} higher {metric_display} than {param_name}={disadvantaged_group}"
+
+
+def _humanize_metric_name(metric_name: str) -> str:
+    """
+    Convert technical metric names to human-readable labels
+    """
+    humanized_names = {
+        'decision': 'approval rate',
+        'status': 'success rate',
+        'outcome': 'positive outcome rate',
+        'result': 'success rate',
+        'verification_required': 'verification rate',
+        'interest_rate': 'interest rate',
+        'processing_time': 'processing time',
+        'processing_time_hours': 'processing time',
+        'approved_amount': 'approved amount',
+        'loan_amount': 'loan amount',
+        'credit_score': 'credit score',
+        'income': 'income',
+        'cv_score': 'CV score',
+        'score': 'score'
+    }
+
+    return humanized_names.get(metric_name.lower(), metric_name)
 
 
 def _assess_fairness_concern(
@@ -560,7 +676,7 @@ def _is_identifier_parameter(param_name: str, groups: Dict) -> bool:
 
     # IMPORTANT: Exclude derived grouping parameters (age_group, salary_range, etc.)
     # These are meaningful for bias detection even if they contain identifier keywords
-    grouping_suffixes = ["_group", "_range", "_bucket", "_category", "_tier"]
+    grouping_suffixes = ["_group", "_range", "_bucket", "_category", "_tier", "_type"]
     if any(param_lower.endswith(suffix) for suffix in grouping_suffixes):
         return False
 
@@ -570,7 +686,11 @@ def _is_identifier_parameter(param_name: str, groups: Dict) -> bool:
     # ID indicators
     id_keywords = ["id", "uuid", "guid", "identifier"]
 
-    for keyword in name_keywords + id_keywords:
+    # Location identifiers (specific addresses, zip codes, phone numbers)
+    # These are individual-level and should use grouped versions instead
+    location_identifiers = ["_zip", "_zipcode", "_postal", "_address", "_phone", "_email"]
+
+    for keyword in name_keywords + id_keywords + location_identifiers:
         if keyword in param_lower:
             return True
 

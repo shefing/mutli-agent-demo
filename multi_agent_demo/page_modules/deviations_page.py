@@ -192,7 +192,7 @@ def render():
     st.divider()
 
     # Layout: Left column for upload/config, Right column for results
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 2])
 
     with col1:
         # OTEL file upload
@@ -232,11 +232,24 @@ def render():
                                     agent_purpose=st.session_state.agent_purpose
                                 )
 
+                                # Debug logging
+                                import sys
+                                print(f"\n{'='*60}", file=sys.stderr)
+                                print(f"BIAS DETECTION RESULTS:", file=sys.stderr)
+                                print(f"Total findings: {len(bias_results)}", file=sys.stderr)
+                                for i, b in enumerate(bias_results):
+                                    print(f"  {i+1}. {b['parameter']} × {b['metric']}: {b['details']['disparity_ratio']:.2f}x (protected={b.get('is_protected_attribute', False)})", file=sys.stderr)
+                                print(f"{'='*60}\n", file=sys.stderr)
+
                             # Store results in session state
                             st.session_state.deviation_results = deviation_results
                             st.session_state.bias_results = bias_results
 
+                            # Debug: Show what was found
+                            bias_summary = ", ".join([f"{b['parameter']}×{b['metric']}" for b in bias_results[:5]])
                             st.success(f"✅ Analysis complete! Found {len(deviation_results)} deviations and {len(bias_results)} bias patterns")
+                            if bias_results:
+                                st.info(f"Bias patterns: {bias_summary}")
                             st.rerun()
 
                         except Exception as e:

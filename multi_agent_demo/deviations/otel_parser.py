@@ -109,6 +109,16 @@ def _convert_otlp_span(span: Dict, resource: Dict) -> Dict[str, Any]:
         if "stringValue" in value:
             attributes[f"resource.{key}"] = value["stringValue"]
 
+    # Convert decision/status outcomes to numeric values for bias detection
+    # This ensures traces have numeric decision values that _calculate_group_statistics can use
+    for key in ['decision', 'status', 'outcome', 'result']:
+        if key in attributes and isinstance(attributes[key], str):
+            value_lower = attributes[key].lower()
+            if value_lower in ['approved', 'accepted', 'granted', 'yes', 'pass', 'success']:
+                attributes[key] = 1.0
+            elif value_lower in ['rejected', 'denied', 'declined', 'no', 'fail', 'failure']:
+                attributes[key] = 0.0
+
     return {
         "trace_id": span.get("traceId", ""),
         "span_id": span.get("spanId", ""),
@@ -123,6 +133,9 @@ def _extract_metrics(traces: List[Dict[str, Any]]) -> Dict[str, List[float]]:
     """
     Extract numeric metrics from traces
 
+    Note: Decision/status values are already converted to 1.0/0.0 during parsing.
+    Boolean values are converted to 1.0/0.0 here.
+
     Returns dictionary mapping metric names to lists of values
     """
     metrics = defaultdict(list)
@@ -130,9 +143,12 @@ def _extract_metrics(traces: List[Dict[str, Any]]) -> Dict[str, List[float]]:
     for trace in traces:
         attributes = trace.get("attributes", {})
         for key, value in attributes.items():
-            # Only extract numeric values as metrics
+            # Extract numeric values (including pre-converted decision values)
             if isinstance(value, (int, float)):
                 metrics[key].append(float(value))
+            # Convert boolean values to numeric
+            elif isinstance(value, bool):
+                metrics[key].append(1.0 if value else 0.0)
 
     return dict(metrics)
 

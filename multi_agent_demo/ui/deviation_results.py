@@ -62,19 +62,21 @@ def _render_simple_bias_card(bias: Dict[str, Any]):
 
         with col1:
             if 'advantaged_group' in details:
-                st.metric(
-                    "Advantaged Group",
-                    str(details['advantaged_group'])[:20],
-                    f"{details.get('advantaged_mean', 0):.2f}"
-                )
+                group_label = str(details['advantaged_group'])
+                count = details.get('advantaged_count', 0)
+                mean_val = details.get('advantaged_mean', 0)
+                st.markdown(f"**Advantaged Group (n={count})**")
+                st.markdown(f"<div style='font-size: 1.1rem; margin-top: -0.5rem;'>{group_label}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size: 0.9rem; color: #888;'>Mean: {mean_val:.2f}</div>", unsafe_allow_html=True)
 
         with col2:
             if 'disadvantaged_group' in details:
-                st.metric(
-                    "Disadvantaged Group",
-                    str(details['disadvantaged_group'])[:20],
-                    f"{details.get('disadvantaged_mean', 0):.2f}"
-                )
+                group_label = str(details['disadvantaged_group'])
+                count = details.get('disadvantaged_count', 0)
+                mean_val = details.get('disadvantaged_mean', 0)
+                st.markdown(f"**Disadvantaged Group (n={count})**")
+                st.markdown(f"<div style='font-size: 1.1rem; margin-top: -0.5rem;'>{group_label}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size: 0.9rem; color: #888;'>Mean: {mean_val:.2f}</div>", unsafe_allow_html=True)
 
         with col3:
             if 'disparity_ratio' in details:
