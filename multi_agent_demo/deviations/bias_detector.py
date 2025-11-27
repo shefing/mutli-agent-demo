@@ -37,21 +37,8 @@ def detect_bias(
     # Identify protected/sensitive attributes (including numeric ones like age)
     protected_attributes = _identify_protected_attributes(parameter_groups)
 
-    # Also check numeric attributes that might be protected (like age)
-    numeric_protected = []
-    for attr_name in parsed_data["attributes"].keys():
-        attr_lower = attr_name.lower()
-        if "age" in attr_lower and attr_name in metrics:
-            numeric_protected.append(attr_name)
-            protected_attributes.append(attr_name)
-
-    # Create age groups for numeric age attributes
-    for age_attr in numeric_protected:
-        if age_attr in metrics:
-            age_groups = _create_age_groups(traces, age_attr)
-            if len(age_groups) >= 2:
-                parameter_groups[f"{age_attr}_group"] = age_groups
-                protected_attributes.append(f"{age_attr}_group")
+    # Note: Age grouping is now handled automatically in _group_by_parameters() in otel_parser.py
+    # No need for duplicate age binning logic here
 
     # For each metric, check if it varies significantly across parameter groups
     for metric_name, metric_values in metrics.items():

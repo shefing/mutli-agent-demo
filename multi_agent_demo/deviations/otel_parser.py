@@ -216,8 +216,20 @@ def _group_by_parameters(traces: List[Dict[str, Any]], attributes: Dict[str, Set
     parameter_groups = {}
 
     for attr_name, unique_values in attributes.items():
-        # Skip numeric attributes (handled as metrics)
-        if all(isinstance(v, (int, float)) for v in unique_values):
+        # Check if this is a numeric attribute that should be binned
+        is_numeric = all(isinstance(v, (int, float)) for v in unique_values)
+
+        if is_numeric:
+            # Check if this is a protected numeric attribute (age, income, etc.)
+            attr_lower = attr_name.lower()
+            needs_binning = any(keyword in attr_lower for keyword in ['age', 'income', 'salary', 'tenure', 'experience', 'years'])
+
+            if needs_binning:
+                # Bin numeric values into categorical groups
+                groups = _bin_numeric_attribute(traces, attr_name, unique_values)
+                if len(groups) > 1:
+                    parameter_groups[f"{attr_name}_group"] = groups
+            # Skip other numeric attributes (handled as metrics)
             continue
 
         # Only group by categorical attributes with reasonable cardinality
@@ -235,6 +247,88 @@ def _group_by_parameters(traces: List[Dict[str, Any]], attributes: Dict[str, Set
             parameter_groups[attr_name] = dict(groups)
 
     return parameter_groups
+
+
+def _bin_numeric_attribute(traces: List[Dict[str, Any]], attr_name: str, unique_values: Set) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Bin numeric attribute values into categorical groups for bias detection
+
+    For age: uses common age brackets (under_40, 40_and_over)
+    For other numeric attributes: uses quartiles or median split
+    """
+    attr_lower = attr_name.lower()
+    groups = defaultdict(list)
+
+    # Special handling for age
+    if 'age' in attr_lower:
+        for trace in traces:
+            attrs = trace.get("attributes", {})
+            if attr_name in attrs:
+                age = attrs[attr_name]
+                # Common age discrimination threshold
+                if age < 40:
+                    groups["under_40"].append(trace)
+                else:
+                    groups["40_and_over"].append(trace)
+
+    # Special handling for income/salary
+    elif 'income' in attr_lower or 'salary' in attr_lower:
+        # Use median split for income
+        values = sorted(unique_values)
+        median = values[len(values) // 2] if values else 0
+
+        for trace in traces:
+            attrs = trace.get("attributes", {})
+            if attr_name in attrs:
+                value = attrs[attr_name]
+                if value < median:
+                    groups["below_median"].append(trace)
+                else:
+                    groups["above_median"].append(trace)
+
+    # Special handling for experience/tenure (years)
+    elif 'years' in attr_lower or 'tenure' in attr_lower or 'experience' in attr_lower:
+        for trace in traces:
+            attrs = trace.get("attributes", {})
+            if attr_name in attrs:
+                years = attrs[attr_name]
+                if years < 5:
+                    groups["0-5_years"].append(trace)
+                elif years < 10:
+                    groups["5-10_years"].append(trace)
+                else:
+                    groups["10+_years"].append(trace)
+
+    # Default: use quartile split
+    else:
+        values = sorted(unique_values)
+        if len(values) >= 4:
+            q1 = values[len(values) // 4]
+            q3 = values[3 * len(values) // 4]
+
+            for trace in traces:
+                attrs = trace.get("attributes", {})
+                if attr_name in attrs:
+                    value = attrs[attr_name]
+                    if value <= q1:
+                        groups["low"].append(trace)
+                    elif value >= q3:
+                        groups["high"].append(trace)
+                    else:
+                        groups["medium"].append(trace)
+        else:
+            # Too few values, use median split
+            median = values[len(values) // 2] if values else 0
+            for trace in traces:
+                attrs = trace.get("attributes", {})
+                if attr_name in attrs:
+                    value = attrs[attr_name]
+                    if value < median:
+                        groups["below_median"].append(trace)
+                    else:
+                        groups["above_median"].append(trace)
+
+    return dict(groups)
 
 
 def _parse_timestamp(timestamp: Any) -> datetime:
