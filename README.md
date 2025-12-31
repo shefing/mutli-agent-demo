@@ -18,6 +18,7 @@ A comprehensive demonstration application for testing AI Agent security scanners
 
 ## Table of Contents
 - [Overview](#overview)
+- [Documentation Index](#documentation-index)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Installation](#installation)
@@ -28,6 +29,7 @@ A comprehensive demonstration application for testing AI Agent security scanners
 - [Modules & Functions](#modules--functions)
 - [Sample Data](#sample-data)
 - [Development](#development)
+- [Deployment](#deployment)
 
 ---
 
@@ -40,6 +42,45 @@ Interactive web interface for testing AI agent security scanners against custom 
 
 ### 2. Post-Hoc Behavioral Analysis
 Analyze OpenTelemetry traces to detect temporal deviations and bias patterns in agent behavior over time. Identify behavioral drift, fairness issues, and compliance concerns from production telemetry data.
+
+---
+
+## Documentation Index
+
+This project includes comprehensive documentation organized by topic:
+
+### Getting Started
+- **[INSTALL.md](./INSTALL.md)** - Detailed installation guide with troubleshooting
+- **[QUICKSTART_DEVIATIONS.md](./QUICKSTART_DEVIATIONS.md)** - 5-minute quick start for deviations analysis
+- **[CLAUDE.md](./CLAUDE.md)** - Project overview and development commands
+
+### Feature Documentation
+- **[DEVIATIONS_FEATURE.md](./DEVIATIONS_FEATURE.md)** - Comprehensive deviations analysis guide
+  - Temporal deviation detection algorithms
+  - Bias detection and fairness analysis
+  - OTEL data format requirements
+  - Legal & compliance considerations
+  - Statistical interpretation
+- **[NEMO_FACTCHECKER_GUIDE.md](./NEMO_FACTCHECKER_GUIDE.md)** - FactChecker scanner implementation
+  - NeMo GuardRails configuration
+  - Fact-checking process and algorithms
+  - Detection patterns and scoring
+  - Testing and troubleshooting
+
+### Deployment
+- **[HF_SPACES_DEPLOYMENT.md](./HF_SPACES_DEPLOYMENT.md)** - Deploy to Hugging Face Spaces (5 minutes)
+- **[STREAMLIT_CLOUD_FIX.md](./STREAMLIT_CLOUD_FIX.md)** - Streamlit Cloud deployment fixes
+
+### Technical Documentation
+- **[IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)** - Technical architecture overview
+- **[REFACTORING_SUMMARY.md](./REFACTORING_SUMMARY.md)** - Code refactoring history
+- **Implementation Guides**: ALIGNMENT_CHECK_IMPROVEMENT.md, DIRECT_API_FALLBACK.md, and more
+
+### Sample Data
+- **OTEL-hr-agent-trace.json** - Age bias in HR screening
+- **OTEL-bank-commission-agent-trace.json** - Temporal drift in refunds
+- **OTEL-loan-applications-transactional.json** - Geographic bias in loans
+- **Predefined scenarios** - Goal hijacking, data exfiltration, prompt injection tests
 
 ---
 
@@ -128,38 +169,35 @@ multi_agent_demo/
 
 ## Installation
 
-### Prerequisites
-- Python 3.9+
-- pip package manager
-- API keys (see Configuration section)
-
-### Step-by-Step Installation
-
-**⚠️ Important**: Due to complex dependencies, follow the step-by-step guide:
+### Quick Install
 
 ```bash
-# 1. Clone the repository
+# 1. Clone and setup
 git clone <repository-url>
 cd mutli-agent-demo
-
-# 2. Create virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# 3. Install minimal dependencies first
+# 2. Install dependencies
 pip install -r requirements_minimal.txt
-
-# 4. Install LlamaFirewall
 pip install llamafirewall
-
-# 5. Install NeMo GuardRails (may have conflicts - see INSTALL.md)
 pip install nemoguardrails
 
-# 6. Configure LlamaFirewall (optional)
-llamafirewall configure
+# 3. Configure environment (create .env file)
+OPENAI_API_KEY=your_key
+TOGETHER_API_KEY=your_key
+HF_TOKEN=your_token  # optional
+
+# 4. Run application
+streamlit run multi_agent_demo/app.py
 ```
 
-For troubleshooting dependency conflicts, see [`INSTALL.md`](./INSTALL.md)
+**⚠️ Important**: Due to complex dependencies, see **[INSTALL.md](./INSTALL.md)** for:
+- Detailed step-by-step installation
+- Troubleshooting dependency conflicts
+- Environment variable configuration
+- Scanner availability by deployment type
+- Streamlit Cloud deployment guide
 
 ### Dependencies
 
@@ -333,47 +371,31 @@ streamlit run multi_agent_demo/guards_demo_ui.py
 
 Access the application at `http://localhost:8501`
 
-### Real-Time Testing Workflow
+### Quick Start Guides
 
-1. **Select Scanners**: Enable desired scanners in the sidebar (PromptGuard, AlignmentCheck, FactChecker)
-2. **Configure Agent**: Set agent name, role, and purpose in the sidebar
-3. **Build Conversation**:
-   - Load a predefined scenario OR
-   - Create custom conversation with user messages, assistant responses, and actions
-4. **Run Tests**: Click "Run Scanner Tests" to test all enabled scanners
-5. **Review Results**:
-   - View AlignmentCheck gauge score
-   - Check PromptGuard violation alerts
-   - Expand NeMo GuardRails sections for detailed fact-checking
-6. **Save Scenario**: Save custom scenarios for future testing
+**New to Deviations Analysis?**
+See **[QUICKSTART_DEVIATIONS.md](./QUICKSTART_DEVIATIONS.md)** for a 5-minute guided tutorial with:
+- Sample data walkthrough
+- OTEL data format requirements
+- Results interpretation
+- Common troubleshooting
 
-### Deviations Analysis Workflow
+**Want to understand FactChecker?**
+See **[NEMO_FACTCHECKER_GUIDE.md](./NEMO_FACTCHECKER_GUIDE.md)** for detailed implementation guide.
 
-1. **Configure Agent**: Set agent name, role, and purpose in shared configuration
-2. **Load Data**:
-   - Upload your own OpenTelemetry JSON trace OR
-   - Use sample data (HR Agent, Bank Commission Agent, Loan Processing Agent)
-3. **Analyze**: Click "Analyze OTEL Data" to detect deviations and bias
-4. **Review Results**:
-   - View overall severity scores
-   - Expand deviation findings (temporal drift, sudden changes)
-   - Expand bias findings (protected attribute correlations)
-   - Examine visualizations (trend charts, group comparisons)
-5. **Take Action**: Use recommendations to address identified issues
+### Basic Workflows
 
-### Predefined Scenarios
+#### Real-Time Testing
+1. Select scanners in sidebar → Configure agent → Build/load conversation → Run tests → Review results
 
-**Real-Time Testing:**
-- **Legitimate Banking**: Normal banking operations (baseline)
-- **Goal Hijacking**: Attempts to redirect agent from intended purpose
-- **Data Exfiltration**: Attempts to extract sensitive information
-- **Prompt Injection**: Direct attempts to override agent instructions
-- **Fact-Checking Test**: Tests detection of false claims and fabricated statistics
+**Predefined Scenarios**: Legitimate Banking, Goal Hijacking, Data Exfiltration, Prompt Injection, Fact-Checking Test
 
-**Deviations Analysis (Sample OTEL Data):**
-- **HR CV Screening**: Age-based bias in candidate scoring
-- **Bank Commission Refunds**: Temporal drift (increasing refund amounts)
-- **Loan Processing**: Zip code bias in approval decisions
+#### Deviations Analysis
+1. Upload OTEL JSON or use sample data → Configure agent purpose → Run analysis → Review findings
+
+**Sample Data**: HR CV Screening (age bias), Bank Commission Refunds (temporal drift), Loan Processing (zip bias)
+
+For comprehensive usage documentation, see **[DEVIATIONS_FEATURE.md](./DEVIATIONS_FEATURE.md)**
 
 ---
 
@@ -704,6 +726,43 @@ docker run -p 8501:8501 --env-file .env ai-guards-demo
 
 ---
 
+## Deployment
+
+### Hugging Face Spaces (Recommended)
+
+Deploy your application to Hugging Face Spaces in 5 minutes:
+
+```bash
+# Add HF remote
+git remote add hf https://huggingface.co/spaces/YOUR_USERNAME/ai-guards-demo
+
+# Push
+git push hf main
+
+# Add secrets in HF Spaces settings
+# - OPENAI_API_KEY
+# - TOGETHER_API_KEY
+# - HF_TOKEN
+```
+
+Your app will be live at: `https://huggingface.co/spaces/YOUR_USERNAME/ai-guards-demo`
+
+**See [HF_SPACES_DEPLOYMENT.md](./HF_SPACES_DEPLOYMENT.md) for:**
+- Complete deployment guide
+- Hardware tier recommendations
+- Cost comparison ($0 free tier, $25/mo upgrade)
+- Performance optimization tips
+- Alternative deployment options (Railway.app)
+
+### Streamlit Cloud
+
+For Streamlit Cloud deployment, see **[STREAMLIT_CLOUD_FIX.md](./STREAMLIT_CLOUD_FIX.md)** for:
+- Secrets configuration
+- Scanner compatibility issues
+- Troubleshooting common errors
+
+---
+
 ## API Rate Limits & Costs
 
 ### OpenAI (gpt-4o-mini)
@@ -731,45 +790,23 @@ docker run -p 8501:8501 --env-file .env ai-guards-demo
 
 ## Troubleshooting
 
-### Common Issues
+### Quick Fixes
 
-**1. Module Import Errors**
-```bash
-# Solution: Follow step-by-step installation in INSTALL.md
-pip install -r requirements_minimal.txt
-pip install llamafirewall
-pip install nemoguardrails
-```
+| Issue | Quick Solution | Details |
+|-------|---------------|---------|
+| **Module Import Errors** | `pip install -r requirements_minimal.txt` | See [INSTALL.md](./INSTALL.md) |
+| **API Key Not Found** | Create `.env` with API keys | See Configuration section |
+| **HuggingFace Model Download Fails** | Set `HF_TOKEN` in `.env` | See [INSTALL.md](./INSTALL.md) |
+| **NeMo Dependency Conflicts** | Install in specific order | See [INSTALL.md](./INSTALL.md) |
+| **Deviations: "No traces found"** | Check JSON format | See [QUICKSTART_DEVIATIONS.md](./QUICKSTART_DEVIATIONS.md) |
+| **FactChecker Initialization Failed** | Verify `OPENAI_API_KEY` | See [NEMO_FACTCHECKER_GUIDE.md](./NEMO_FACTCHECKER_GUIDE.md) |
 
-**2. API Key Not Found**
-```bash
-# Solution: Create .env file in project root
-echo "OPENAI_API_KEY=sk-..." > .env
-echo "TOGETHER_API_KEY=..." >> .env
-```
+### Detailed Troubleshooting Guides
 
-**3. HuggingFace Model Download Fails**
-```bash
-# Solution: Set HF_TOKEN in .env
-echo "HF_TOKEN=hf_..." >> .env
-
-# Or configure offline mode
-echo "TRANSFORMERS_OFFLINE=1" >> .env
-```
-
-**4. NeMo GuardRails Dependency Conflicts**
-```bash
-# Solution: Install in specific order (see INSTALL.md)
-pip install nemoguardrails --no-deps
-pip install -r requirements_minimal.txt
-```
-
-**5. spaCy Model Not Found**
-```bash
-# Solution: Download spaCy model (optional)
-python -m spacy download en_core_web_lg
-# Or use pattern-only mode (automatic fallback)
-```
+- **Installation Issues**: See [INSTALL.md](./INSTALL.md) for comprehensive troubleshooting
+- **Deviations Analysis**: See [QUICKSTART_DEVIATIONS.md](./QUICKSTART_DEVIATIONS.md) troubleshooting section
+- **FactChecker Scanner**: See [NEMO_FACTCHECKER_GUIDE.md](./NEMO_FACTCHECKER_GUIDE.md) troubleshooting section
+- **Deployment Issues**: See [HF_SPACES_DEPLOYMENT.md](./HF_SPACES_DEPLOYMENT.md) or [STREAMLIT_CLOUD_FIX.md](./STREAMLIT_CLOUD_FIX.md)
 
 ---
 
@@ -791,11 +828,23 @@ Contributions welcome! Please:
 
 ## Support
 
-For issues and questions:
-- Check [INSTALL.md](./INSTALL.md) for installation troubleshooting
-- Check [CLAUDE.md](./CLAUDE.md) for development guidance
-- Review sample OTEL data for usage examples
+### Getting Help
+
+**First Steps:**
+1. Check the [Documentation Index](#documentation-index) for relevant guides
+2. Review [Troubleshooting](#troubleshooting) section above
+3. Try the sample data and predefined scenarios
+
+**Common Questions:**
+- **Installation problems?** → [INSTALL.md](./INSTALL.md)
+- **How do I analyze OTEL data?** → [QUICKSTART_DEVIATIONS.md](./QUICKSTART_DEVIATIONS.md)
+- **How does FactChecker work?** → [NEMO_FACTCHECKER_GUIDE.md](./NEMO_FACTCHECKER_GUIDE.md)
+- **How to deploy?** → [HF_SPACES_DEPLOYMENT.md](./HF_SPACES_DEPLOYMENT.md)
+- **Development commands?** → [CLAUDE.md](./CLAUDE.md)
+
+**Still Need Help?**
 - Open GitHub issue for bugs or feature requests
+- Include error messages, logs, and steps to reproduce
 
 ---
 
