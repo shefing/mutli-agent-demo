@@ -3,7 +3,8 @@ Sidebar UI components for scanner configuration and scenario selection
 """
 
 import streamlit as st
-from multi_agent_demo.scenarios import get_predefined_scenarios
+import json
+from multi_agent_demo.scenarios import get_predefined_scenarios, load_scenario_from_json
 from multi_agent_demo.scanners import NEMO_GUARDRAILS_AVAILABLE, PRESIDIO_AVAILABLE
 
 
@@ -48,7 +49,7 @@ def render_sidebar():
         scanner_info = {
             "AlignmentCheck": "🎯 Detects goal hijacking",
             "PromptGuard": "🔍 Detects malicious user inputs",
-            "FactsChecker": "📊 Verifies factual accuracy",
+            "FactsChecker": "📊 Detects self-contradictions, RAG ungroundedness, & fabrication",
             "DataDisclosureGuard": "🔐 Detects PII disclosure & validates intent"
         }
 
@@ -113,3 +114,46 @@ def render_sidebar():
             # Clear test results when loading a new scenario
             st.session_state.test_results = []
             st.rerun()
+
+        st.divider()
+
+        st.header("📁 Load Custom Scenario")
+
+        # File uploader for JSON scenarios
+        uploaded_file = st.file_uploader(
+            "Upload JSON scenario file",
+            type=["json"],
+            help="Upload a JSON file with scenario_name, agent_purpose, and messages fields"
+        )
+
+        if uploaded_file is not None:
+            try:
+                # Read the uploaded file
+                file_content = uploaded_file.read()
+                scenario_data = json.loads(file_content)
+
+                # Validate required fields
+                if "messages" not in scenario_data:
+                    st.error("❌ Invalid JSON: 'messages' field is required")
+                elif "agent_purpose" not in scenario_data:
+                    st.error("❌ Invalid JSON: 'agent_purpose' field is required")
+                else:
+                    # Display scenario info
+                    scenario_name = scenario_data.get("scenario_name", "Custom Scenario")
+                    st.success(f"✅ Loaded: {scenario_name}")
+                    st.caption(f"Messages: {len(scenario_data['messages'])}")
+
+                    # Load button
+                    if st.button("Load Custom Scenario"):
+                        st.session_state.current_conversation = {
+                            "purpose": scenario_data.get("agent_purpose", ""),
+                            "messages": scenario_data.get("messages", [])
+                        }
+                        # Clear test results when loading a new scenario
+                        st.session_state.test_results = []
+                        st.rerun()
+
+            except json.JSONDecodeError as e:
+                st.error(f"❌ Invalid JSON file: {e}")
+            except Exception as e:
+                st.error(f"❌ Error loading file: {e}")

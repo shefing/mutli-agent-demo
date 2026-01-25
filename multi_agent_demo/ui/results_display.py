@@ -226,6 +226,77 @@ def _render_nemo_results(result: dict):
                 # Show analysis with expandable full response
                 st.info(f"**Analysis:** {scanner_result['reason']}")
 
+                # Special handling for FactsChecker comprehensive checks
+                if scanner_name == "FactsChecker" and "checks_performed" in scanner_result:
+                    checks = scanner_result["checks_performed"]
+                    issues = scanner_result.get("issues_detected", [])
+                    detailed_analysis = scanner_result.get("detailed_analysis", {})
+                    per_message_findings = scanner_result.get("per_message_findings", [])
+
+                    # Show which checks were performed (using consistent negative forms)
+                    st.markdown("**Checks Performed:**")
+                    check_cols = st.columns(3)
+                    with check_cols[0]:
+                        if checks.get("self_contradiction"):
+                            st.markdown("✅ Self-Contradiction")
+                        else:
+                            st.markdown("➖ Self-Contradiction")
+                    with check_cols[1]:
+                        if checks.get("rag_ungroundedness"):
+                            st.markdown("✅ RAG Ungroundedness")
+                        else:
+                            st.markdown("➖ RAG Ungroundedness")
+                    with check_cols[2]:
+                        if checks.get("fabrication"):
+                            st.markdown("✅ Fabrication")
+                        else:
+                            st.markdown("➖ Fabrication")
+
+                    # Show detected issues summary
+                    if issues:
+                        st.markdown("**Issues Detected:**")
+                        for issue in issues:
+                            if issue == "Self-Contradiction":
+                                st.error(f"⚠️ **{issue}**: Agent contradicted previous statements")
+                            elif issue == "RAG Ungroundedness":
+                                st.error(f"⚠️ **{issue}**: Response not grounded in provided evidence")
+                            elif issue == "Fabrication":
+                                st.error(f"⚠️ **{issue}**: Unsourced or false claims detected")
+                            else:
+                                st.error(f"⚠️ {issue}")
+
+                            # Show overall analysis for this issue type
+                            if issue in detailed_analysis:
+                                with st.expander(f"🔍 View {issue} Overall Summary"):
+                                    st.markdown(detailed_analysis[issue])
+
+                        # Show per-message findings (for RAG Ungroundedness and Fabrication)
+                        if per_message_findings:
+                            st.markdown("---")
+                            st.markdown("**📋 Per-Message Analysis:**")
+                            st.caption("Each assistant message was analyzed individually")
+
+                            # Group findings by message number
+                            findings_by_message = {}
+                            for finding in per_message_findings:
+                                msg_num = finding["message_number"]
+                                if msg_num not in findings_by_message:
+                                    findings_by_message[msg_num] = []
+                                findings_by_message[msg_num].append(finding)
+
+                            # Display findings per message
+                            for msg_num in sorted(findings_by_message.keys()):
+                                findings = findings_by_message[msg_num]
+                                issues_list = [f["issue_type"] for f in findings]
+
+                                st.markdown(f"**Message {msg_num}:** {', '.join(issues_list)}")
+                                st.caption(f"_Preview:_ {findings[0]['message_preview']}")
+
+                                # Show detailed analysis for each issue type in this message
+                                for finding in findings:
+                                    with st.expander(f"🔍 Message {msg_num} - {finding['issue_type']} Details"):
+                                        st.markdown(finding['details'])
+
                 # Special handling for DataDisclosureGuard PII findings
                 if scanner_name == "DataDisclosureGuard" and "pii_findings" in scanner_result:
                     pii_findings = scanner_result["pii_findings"]

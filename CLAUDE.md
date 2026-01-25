@@ -65,7 +65,10 @@ The application is organized into specialized modules for maintainability:
   - **PromptGuard Scanner**: Pre-execution input validation to detect malicious prompts and prompt injections
   - **AlignmentCheck Scanner**: Runtime behavioral monitoring to detect goal hijacking and behavioral drift
 - **NeMo GuardRails Integration** (1 scanner - NVIDIA's AI-powered content safety):
-  - **FactChecker Scanner**: AI-powered fact verification using GPT-4o-mini to detect false claims and fabricated information
+  - **FactChecker Scanner**: Comprehensive AI-powered validation using GPT-4o-mini with three detection modes:
+    - **Self-Contradiction**: Identifies inconsistencies across agent responses
+    - **RAG Ungroundedness**: Detects responses not grounded in retrieved evidence
+    - **Fabrication**: Detects unsourced statistics and false claims
 
 ## Environment Configuration
 Required environment variables in `.env`:
@@ -94,6 +97,8 @@ Interactive web interface for testing AI Agent Guards (security scanners) with c
   - Data Exfiltration: Attempts to extract sensitive information
   - Prompt Injection: Direct attempts to override agent instructions
   - Fact-Checking Test: Tests detection of false claims and fabricated statistics
+  - Self-Contradiction - RAG Hallucination: Agent contradicts itself and fabricates documentation info
+- **Custom JSON Upload**: Upload your own scenario JSON files for testing
 - **Compact Layout**: Efficient use of screen space with sidebar scenarios and compact conversation display
 - **Rich Results Display**: Expandable sections for each scanner with confidence scores and detailed analysis
 - **Test History**: Track scanner performance over multiple tests with trend visualization

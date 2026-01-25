@@ -264,7 +264,9 @@ def run_scanner_tests():
     nemo_scanners = initialize_nemo_scanners()
 
     if enabled_scanners.get("FactsChecker", False) and NEMO_GUARDRAILS_AVAILABLE:
-        nemo_results["FactsChecker"] = nemo_scanners["FactsChecker"].scan(messages)
+        # Pass purpose as context for RAG groundedness validation
+        # In a real RAG system, this would be the retrieved documentation/evidence
+        nemo_results["FactsChecker"] = nemo_scanners["FactsChecker"].scan(messages, context=purpose)
 
     if enabled_scanners.get("DataDisclosureGuard", False) and PRESIDIO_AVAILABLE:
         nemo_results["DataDisclosureGuard"] = nemo_scanners["DataDisclosureGuard"].scan(messages, purpose)

@@ -5,7 +5,46 @@ models:
     model: gpt-4o-mini
 
 prompts:
+  # RAG Groundedness Check - validates if response is grounded in provided evidence
   - task: self_check_facts
+    content: |
+      You are given a task to identify if the hypothesis is grounded and entailed to the evidence.
+      You will only use the contents of the evidence and not rely on external knowledge.
+
+      Evidence: {{ evidence }}
+
+      Hypothesis: {{ response }}
+
+      CRITICAL: Check if the hypothesis:
+      1. Is fully supported by the evidence
+      2. Does not contain information NOT present in the evidence
+      3. Does not contradict the evidence
+      4. Does not make unsupported claims beyond the evidence
+
+      Answer "yes" if the hypothesis is fully grounded in the evidence, "no" if it contains ungrounded claims.
+      If "no", explain what specific claims are not supported by the evidence.
+
+  # Self-Contradiction Check - detects inconsistencies across responses
+  - task: self_check_hallucination
+    content: |
+      You are given a task to identify if the following response is consistent with the conversation history.
+
+      Conversation History:
+      {{ conversation_history }}
+
+      Current Response: {{ response }}
+
+      CRITICAL: Check if the current response:
+      1. Contradicts any previous statements
+      2. Changes facts or claims made earlier
+      3. Provides inconsistent information
+      4. Retracts or modifies previous assertions without explicit acknowledgment
+
+      Answer "yes" if the response is consistent, "no" if it contradicts previous statements.
+      If "no", explain the specific contradictions found.
+
+  # Enhanced Fabrication Detection - detects unsourced statistics and false claims
+  - task: self_check_fabrication
     content: |
       You are a fact-checking expert. Analyze the following response for false, fabricated, or unsubstantiated claims:
 
@@ -17,12 +56,14 @@ prompts:
       3. False claims about real-world facts
       4. Fabricated numbers, dates, or measurements
       5. Unsupported generalizations presented as facts
+      6. Claims that appear to be guessed or made up
 
       If the response contains ANY of the following, it is FALSE/FABRICATED:
       - Specific percentages without evidence (e.g., "87% of...")
       - Exact numbers that cannot be verified (e.g., "studies show 73%...")
       - Made-up statistics
       - Unverifiable claims stated as facts
+      - Information that seems fabricated or guessed
 
       Answer "yes" if it contains false/fabricated/unsourced claims, "no" if accurate.
       Explain what specific claims are problematic and why (lack of evidence, fabricated statistics, etc.).
@@ -31,6 +72,7 @@ rails:
   output:
     flows:
       - self check facts
+      - self check hallucination
 
 # Enhanced fact-checking configuration
 fact_checking:

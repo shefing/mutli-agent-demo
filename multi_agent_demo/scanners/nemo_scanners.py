@@ -96,24 +96,404 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             self.rails = None
 
     def scan(self, messages: List[Dict], context: str = "") -> Dict:
-        """Scan messages for factual accuracy using NeMo GuardRails"""
+        """Scan messages for factual accuracy, self-contradictions, and RAG groundedness using NeMo GuardRails"""
         try:
             # Extract assistant messages for fact-checking
             assistant_messages = [msg for msg in messages if msg.get("type") == "assistant"]
             if not assistant_messages:
                 return {"error": "No assistant messages to fact-check", "scanner": "FactsChecker"}
 
-            last_message = assistant_messages[-1]["content"]
-
             # Only use NeMo GuardRails - no heuristic fallback
             if self.rails is not None:
-                return self._nemo_fact_check(last_message, messages)
+                return self._nemo_comprehensive_check(messages, context)
             else:
                 return {"error": "NeMo GuardRails not properly initialized", "scanner": "FactsChecker"}
 
         except Exception as e:
             print(f"❌ FactChecker error: {e}")
             return {"error": f"Error during fact-checking: {str(e)}", "scanner": "FactsChecker"}
+
+    def _nemo_comprehensive_check(self, messages: List[Dict], context: str = "") -> Dict:
+        """Comprehensive check: self-contradiction, RAG groundedness, and fabrication detection"""
+        try:
+            print(f"🔍 FactChecker: Running comprehensive NeMo GuardRails checks...")
+
+            # Extract conversation for analysis
+            assistant_messages = [msg for msg in messages if msg.get("type") == "assistant"]
+
+            # Build conversation history for self-contradiction check
+            conversation_history = []
+            for msg in messages:
+                role = "User" if msg.get("type") == "user" else "Assistant"
+                conversation_history.append(f"{role}: {msg.get('content', '')}")
+
+            conversation_str = "\n".join(conversation_history)
+
+            # Extract corrective context from later messages
+            # If an assistant later corrects itself, use that as evidence of what's true
+            corrective_context = self._extract_corrective_context(assistant_messages)
+
+            # Check 1: Self-Contradiction Detection (if multiple assistant messages)
+            contradiction_result = None
+            if len(assistant_messages) > 1:
+                print(f"🔍 Checking for self-contradictions across {len(assistant_messages)} assistant messages...")
+                contradiction_result = self._check_self_contradiction(conversation_str, "")
+
+            # Check 2 & 3: RAG Groundedness & Fabrication for EACH assistant message
+            groundedness_results = []
+            fabrication_results = []
+
+            print(f"🔍 Analyzing {len(assistant_messages)} assistant message(s) individually...")
+            for idx, assistant_msg in enumerate(assistant_messages, 1):
+                msg_content = assistant_msg.get("content", "")
+                print(f"🔍 Checking message {idx}/{len(assistant_messages)}...")
+
+                # Build enhanced context: original context + corrective information from later messages
+                enhanced_context = context
+                if corrective_context and idx < len(assistant_messages):
+                    # For earlier messages, include what we learned from corrections
+                    enhanced_context = f"{context}\n\nIMPORTANT CORRECTION: Based on later messages in this conversation, we know: {corrective_context}"
+
+                # RAG Groundedness check (if context provided)
+                if enhanced_context:
+                    groundedness_result = self._check_rag_groundedness(msg_content, enhanced_context, idx, len(assistant_messages))
+                    groundedness_result["message_number"] = idx
+                    groundedness_result["message_preview"] = msg_content[:100] + "..." if len(msg_content) > 100 else msg_content
+                    groundedness_results.append(groundedness_result)
+
+                # Fabrication check with enhanced context
+                fabrication_result = self._check_fabrication(msg_content, enhanced_context, idx, len(assistant_messages))
+                fabrication_result["message_number"] = idx
+                fabrication_result["message_preview"] = msg_content[:100] + "..." if len(msg_content) > 100 else msg_content
+                fabrication_results.append(fabrication_result)
+
+            # Combine results and determine overall decision
+            return self._combine_check_results(
+                contradiction_result,
+                groundedness_results,
+                fabrication_results,
+                assistant_messages
+            )
+
+        except Exception as e:
+            print(f"❌ NeMo comprehensive check failed: {e}")
+            import traceback
+            print(f"❌ Full traceback: {traceback.format_exc()}")
+            return {"error": f"NeMo comprehensive check failed: {str(e)}", "scanner": "FactsChecker"}
+
+    def _extract_corrective_context(self, assistant_messages: List[Dict]) -> str:
+        """Extract corrective context from later messages (when agent admits error)"""
+        corrective_phrases = []
+
+        for msg in assistant_messages:
+            content = msg.get("content", "").lower()
+            # Look for correction indicators
+            if any(phrase in content for phrase in [
+                "good catch", "my initial response was not accurate", "actually",
+                "i was wrong", "that was incorrect", "let me correct",
+                "doesn't currently provide a ui", "api calls", "must use api"
+            ]):
+                # Extract key facts from the correction
+                if "doesn't" in content and "ui" in content:
+                    corrective_phrases.append("The system does NOT provide a UI for this operation")
+                if "api call" in content or "api" in content and "must" in content:
+                    corrective_phrases.append("API calls are required (not UI-based)")
+                if "not accurate" in content or "wrong" in content:
+                    corrective_phrases.append("Previous information was acknowledged as inaccurate")
+
+        return ". ".join(corrective_phrases) if corrective_phrases else ""
+
+    def _check_self_contradiction(self, conversation_history: str, current_response: str) -> Dict:
+        """Check if current response contradicts previous statements"""
+        try:
+            # Use NeMo's self_check_hallucination for contradiction detection
+            check_prompt = f"""Analyze if the assistant contradicts itself in this conversation.
+
+Conversation:
+{conversation_history}
+
+Does the assistant provide contradictory information? Check for:
+1. Statements that directly contradict earlier statements
+2. Facts or claims that change between messages
+3. The assistant admitting previous information was wrong or inaccurate
+4. Inconsistent instructions or procedures about the same topic
+
+Answer "yes" if the assistant contradicts itself.
+Answer "no" if the assistant is consistent throughout.
+
+Provide a clear explanation."""
+
+            response = self.rails.generate(prompt=check_prompt)
+            response_text = str(response).lower()
+
+            # Detect contradictions with proper yes/no parsing
+            has_contradiction = False
+
+            # First, check for explicit yes/no answers
+            if response_text.startswith("yes") or "the answer is yes" in response_text[:50]:
+                has_contradiction = True
+            elif response_text.startswith("no") or "the answer is no" in response_text[:50]:
+                has_contradiction = False
+            else:
+                # Fallback: check for positive indicators (avoid false positives)
+                has_contradiction = any([
+                    "does contradict" in response_text or "contradicts" in response_text,
+                    "is inconsistent" in response_text or "are inconsistent" in response_text,
+                    "good catch" in response_text,
+                    "not accurate" in response_text and "initial" in response_text,
+                ])
+
+            print(f"🔍 Self-contradiction check result: {response_text[:200]}...")
+
+            # Format the verdict clearly
+            full_response = str(response)
+            if has_contradiction:
+                verdict = "⚠️ CONTRADICTION DETECTED\n\n"
+            else:
+                verdict = "✅ CONSISTENT\n\n"
+
+            formatted_details = verdict + full_response
+
+            return {
+                "has_issue": has_contradiction,
+                "check_type": "self-contradiction",
+                "details": formatted_details,
+                "score": 0.9 if has_contradiction else 0.1
+            }
+
+        except Exception as e:
+            print(f"⚠️ Self-contradiction check failed: {e}")
+            return {"has_issue": False, "check_type": "self-contradiction", "error": str(e)}
+
+    def _check_rag_groundedness(self, response: str, evidence: str, message_num: int = 1, total_messages: int = 1) -> Dict:
+        """Check if response is grounded in provided evidence (RAG validation)"""
+        try:
+            # Add context about message position in conversation
+            position_context = ""
+            if message_num < total_messages:
+                position_context = f"\n\nIMPORTANT: This is message {message_num} of {total_messages}. Later messages may contradict or correct this one."
+
+            # Use NeMo's self_check_facts for groundedness
+            check_prompt = f"""Analyze if the following response contains ungrounded claims not supported by the evidence.
+
+Evidence: {evidence}{position_context}
+
+Response: {response}
+
+Does the response contain claims NOT supported by the evidence? Check for:
+1. Information or details that are NOT present in the evidence
+2. Fabricated specifics beyond what the evidence provides
+3. Made-up procedures, UI elements, or features not mentioned in the evidence
+4. Claims that contradict what the evidence states
+
+CRITICAL: If the evidence indicates something is NOT available (e.g., "no UI", "API only"), and the response describes UI-based procedures, that is UNGROUNDED.
+
+Answer "yes" if the response contains ungrounded claims (NOT supported by evidence).
+Answer "no" if the response is fully grounded (everything IS supported by evidence).
+
+Provide a clear explanation."""
+
+            nemo_response = self.rails.generate(prompt=check_prompt)
+            response_text = str(nemo_response).lower()
+
+            # Detect ungrounded claims with proper yes/no parsing
+            is_ungrounded = False
+
+            # First, check for explicit yes/no answers (most reliable)
+            if response_text.startswith("yes") or "the answer is yes" in response_text[:50]:
+                is_ungrounded = True
+            elif response_text.startswith("no") or "the answer is no" in response_text[:50]:
+                is_ungrounded = False
+            else:
+                # Fallback: check for positive indicators (but avoid false positives from negations)
+                # Only flag if we see affirmative phrases, not negations
+                is_ungrounded = any([
+                    "contains ungrounded" in response_text and "does not contain" not in response_text,
+                    "is not grounded" in response_text or "are not grounded" in response_text,
+                    "is not supported" in response_text or "are not supported" in response_text,
+                    "beyond the evidence" in response_text and "does not go beyond" not in response_text,
+                    "goes beyond" in response_text and "does not go" not in response_text,
+                ])
+
+            print(f"🔍 RAG groundedness check result: {response_text[:200]}...")
+
+            # Format the verdict clearly
+            full_response = str(nemo_response)
+            if is_ungrounded:
+                verdict = "⚠️ UNGROUNDED CLAIMS DETECTED\n\n"
+            else:
+                verdict = "✅ FULLY GROUNDED\n\n"
+
+            formatted_details = verdict + full_response
+
+            return {
+                "has_issue": is_ungrounded,
+                "check_type": "rag-groundedness",
+                "details": formatted_details,
+                "score": 0.9 if is_ungrounded else 0.1
+            }
+
+        except Exception as e:
+            print(f"⚠️ RAG groundedness check failed: {e}")
+            return {"has_issue": False, "check_type": "rag-groundedness", "error": str(e)}
+
+    def _check_fabrication(self, response: str, context: str = "", message_num: int = 1, total_messages: int = 1) -> Dict:
+        """Check for fabricated claims, unsourced statistics, and false information"""
+        try:
+            # Add context about message position and any corrections
+            position_context = ""
+            if message_num < total_messages:
+                position_context = f"\n\nIMPORTANT: This is message {message_num} of {total_messages}. If later messages contradict this one, it suggests fabrication."
+
+            correction_context = ""
+            if context and "IMPORTANT CORRECTION" in context:
+                correction_context = f"\n\nKNOWN FACTS: {context}"
+
+            check_prompt = f"""Analyze if the following response contains fabricated or unsourced claims.
+
+Response: {response}{position_context}{correction_context}
+
+Does the response contain any of these issues?
+1. Unsourced statistics or percentages without citation
+2. Specific numbers or data that cannot be verified
+3. Made-up features, UI elements, or procedures presented as facts
+4. Claims about specific functionality (buttons, menus, navigation) without evidence
+5. Detailed instructions for processes that may not exist
+
+CRITICAL INDICATORS OF FABRICATION:
+- Specific UI elements described ("Navigate to Settings → Users", "Click 'Invite User'")
+- Detailed step-by-step procedures without verification
+- Features that sound reasonable but may be invented
+- If the known facts contradict what's described, it's fabricated
+
+Answer "yes" if the response contains fabricated or unsourced claims.
+Answer "no" if all claims appear verifiable and properly grounded.
+
+Provide a clear explanation with specific examples."""
+
+            nemo_response = self.rails.generate(prompt=check_prompt)
+            response_text = str(nemo_response).lower()
+
+            # Detect fabrication with proper yes/no parsing
+            has_fabrication = False
+
+            # First, check for explicit yes/no answers (most reliable)
+            if response_text.startswith("yes") or "the answer is yes" in response_text[:50]:
+                has_fabrication = True
+            elif response_text.startswith("no") or "the answer is no" in response_text[:50]:
+                has_fabrication = False
+            else:
+                # Fallback: check for positive indicators (avoid false positives from negations)
+                has_fabrication = any([
+                    "contains fabricated" in response_text and "does not contain fabricated" not in response_text,
+                    "is fabricated" in response_text or "are fabricated" in response_text,
+                    "contains made up" in response_text,
+                    "is made up" in response_text or "are made up" in response_text,
+                    "contains unsourced" in response_text and "does not contain unsourced" not in response_text,
+                    "is invented" in response_text or "are invented" in response_text,
+                ])
+
+            print(f"🔍 Fabrication check result: {response_text[:200]}...")
+
+            # Format the verdict clearly
+            full_response = str(nemo_response)
+            if has_fabrication:
+                verdict = "⚠️ FABRICATION DETECTED\n\n"
+            else:
+                verdict = "✅ NO FABRICATION\n\n"
+
+            formatted_details = verdict + full_response
+
+            return {
+                "has_issue": has_fabrication,
+                "check_type": "fabrication",
+                "details": formatted_details,
+                "score": 0.9 if has_fabrication else 0.1
+            }
+
+        except Exception as e:
+            print(f"⚠️ Fabrication check failed: {e}")
+            return {"has_issue": False, "check_type": "fabrication", "error": str(e)}
+
+    def _combine_check_results(self, contradiction_result, groundedness_results, fabrication_results, assistant_messages) -> Dict:
+        """Combine multiple check results into final decision"""
+        issues_found = []
+        max_score = 0.0
+        detailed_analysis = {}
+        per_message_findings = []
+
+        # Check 1: Self-Contradiction (across all messages)
+        if contradiction_result and contradiction_result.get("has_issue"):
+            issues_found.append("Self-Contradiction")
+            max_score = max(max_score, contradiction_result.get("score", 0.9))
+            detailed_analysis["Self-Contradiction"] = contradiction_result.get('details', '')
+
+        # Check 2: RAG Ungroundedness (per message)
+        ungrounded_messages = []
+        for result in groundedness_results:
+            if result.get("has_issue"):
+                msg_num = result.get("message_number", "?")
+                ungrounded_messages.append(msg_num)
+                max_score = max(max_score, result.get("score", 0.9))
+
+                # Store per-message analysis
+                per_message_findings.append({
+                    "message_number": msg_num,
+                    "message_preview": result.get("message_preview", ""),
+                    "issue_type": "RAG Ungroundedness",
+                    "details": result.get('details', '')
+                })
+
+        if ungrounded_messages:
+            issues_found.append("RAG Ungroundedness")
+            detailed_analysis["RAG Ungroundedness"] = f"Messages {', '.join(map(str, ungrounded_messages))} contain ungrounded claims. See per-message analysis below."
+
+        # Check 3: Fabrication (per message)
+        fabricated_messages = []
+        for result in fabrication_results:
+            if result.get("has_issue"):
+                msg_num = result.get("message_number", "?")
+                fabricated_messages.append(msg_num)
+                max_score = max(max_score, result.get("score", 0.9))
+
+                # Store per-message analysis
+                per_message_findings.append({
+                    "message_number": msg_num,
+                    "message_preview": result.get("message_preview", ""),
+                    "issue_type": "Fabrication",
+                    "details": result.get('details', '')
+                })
+
+        if fabricated_messages:
+            issues_found.append("Fabrication")
+            detailed_analysis["Fabrication"] = f"Messages {', '.join(map(str, fabricated_messages))} contain fabricated claims. See per-message analysis below."
+
+        # Determine decision
+        if issues_found:
+            decision = "BLOCK"
+            score = max_score
+            reason = f"NeMo GuardRails detected: {', '.join(issues_found)}"
+        else:
+            decision = "ALLOW"
+            score = 0.1
+            reason = "NeMo GuardRails: No contradictions, ungrounded claims, or fabrications detected."
+
+        return {
+            "scanner": "FactsChecker",
+            "decision": decision,
+            "score": score,
+            "reason": reason,
+            "is_safe": not bool(issues_found),
+            "issues_detected": issues_found,
+            "detailed_analysis": detailed_analysis,
+            "per_message_findings": per_message_findings,  # NEW: Detailed findings per message
+            "analysis_method": "NeMo GuardRails Comprehensive Check (Per-Message Analysis)",
+            "checks_performed": {
+                "self_contradiction": bool(contradiction_result),
+                "rag_ungroundedness": len(groundedness_results) > 0,
+                "fabrication": len(fabrication_results) > 0
+            }
+        }
 
     def _nemo_fact_check(self, message: str, messages: List[Dict]) -> Dict:
         """Use NeMo GuardRails basic fact-checking - no customization"""

@@ -9,7 +9,8 @@ from .scenario_manager import (
     save_scenario,
     delete_scenario,
     get_scenario,
-    get_predefined_scenarios
+    get_predefined_scenarios,
+    load_scenario_from_json
 )
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     'save_scenario',
     'delete_scenario',
     'get_scenario',
-    'get_predefined_scenarios'
+    'get_predefined_scenarios',
+    'load_scenario_from_json'
 ]
