@@ -227,18 +227,19 @@ Provide a clear explanation."""
             response_text = str(response).lower()
             full_response = str(response)
 
-            # Detect contradictions with proper yes/no parsing
-            # Check first 150 chars to catch "the answer is no" even with preamble
-            first_part = response_text[:150]
-
+            # Detect contradictions with comprehensive yes/no parsing
+            # Search the ENTIRE response for the final verdict
             has_contradiction = False
+
+            # Check for direct yes/no at start
             if response_text.startswith("yes"):
                 has_contradiction = True
             elif response_text.startswith("no"):
                 has_contradiction = False
-            elif "answer is yes" in first_part or "answer is 'yes'" in first_part or 'answer is "yes"' in first_part:
+            # Check for "the answer is yes/no" anywhere in response (final verdict)
+            elif "the answer is yes" in response_text or "answer is 'yes'" in response_text or 'answer is "yes"' in response_text or "therefore, yes" in response_text:
                 has_contradiction = True
-            elif "answer is no" in first_part or "answer is 'no'" in first_part or 'answer is "no"' in first_part:
+            elif "the answer is no" in response_text or "answer is 'no'" in response_text or 'answer is "no"' in response_text or "therefore, no" in response_text:
                 has_contradiction = False
             else:
                 # Fallback: check for positive indicators (avoid false positives)
@@ -300,26 +301,28 @@ Provide a clear explanation."""
             response_text = str(nemo_response).lower()
             full_response = str(nemo_response)
 
-            # Detect ungrounded claims with proper yes/no parsing
-            # Check first 150 chars to catch "the answer is no" even with preamble
-            first_part = response_text[:150]
-
+            # Detect ungrounded claims with comprehensive yes/no parsing
+            # Search the ENTIRE response for the final verdict
             is_ungrounded = False
+
+            # Check for direct yes/no at start
             if response_text.startswith("yes"):
                 is_ungrounded = True
             elif response_text.startswith("no"):
                 is_ungrounded = False
-            elif "answer is yes" in first_part or "answer is 'yes'" in first_part or 'answer is "yes"' in first_part:
+            # Check for "the answer is yes/no" anywhere in response (final verdict)
+            elif "the answer is yes" in response_text or "answer is 'yes'" in response_text or 'answer is "yes"' in response_text or "therefore, yes" in response_text:
                 is_ungrounded = True
-            elif "answer is no" in first_part or "answer is 'no'" in first_part or 'answer is "no"' in first_part:
+            elif "the answer is no" in response_text or "answer is 'no'" in response_text or 'answer is "no"' in response_text or "therefore, no" in response_text:
                 is_ungrounded = False
             else:
-                # Fallback: check for positive indicators (but avoid false positives from negations)
-                is_ungrounded = any([
-                    "contains ungrounded" in response_text and "does not contain" not in response_text,
-                    "is not grounded" in response_text or "are not grounded" in response_text,
-                    "is not supported" in response_text or "are not supported" in response_text,
-                ])
+                # Fallback: Look for definitive statements
+                # Check last 200 chars for final verdict
+                last_part = response_text[-200:]
+                if "contains ungrounded" in last_part or "is not grounded" in last_part or "is yes" in last_part:
+                    is_ungrounded = True
+                elif "does not contain ungrounded" in last_part or "is fully grounded" in last_part or "is no" in last_part:
+                    is_ungrounded = False
 
             print(f"🔍 RAG groundedness: {is_ungrounded} - {response_text[:200]}...")
 
@@ -380,25 +383,28 @@ Provide a clear explanation with specific examples."""
             response_text = str(nemo_response).lower()
             full_response = str(nemo_response)
 
-            # Detect fabrication with proper yes/no parsing
-            # Check first 150 chars to catch "the answer is no" even with preamble
-            first_part = response_text[:150]
-
+            # Detect fabrication with comprehensive yes/no parsing
+            # Search the ENTIRE response for the final verdict
             has_fabrication = False
+
+            # Check for direct yes/no at start
             if response_text.startswith("yes"):
                 has_fabrication = True
             elif response_text.startswith("no"):
                 has_fabrication = False
-            elif "answer is yes" in first_part or "answer is 'yes'" in first_part or 'answer is "yes"' in first_part:
+            # Check for "the answer is yes/no" anywhere in response (final verdict)
+            elif "the answer is yes" in response_text or "answer is 'yes'" in response_text or 'answer is "yes"' in response_text or "therefore, yes" in response_text:
                 has_fabrication = True
-            elif "answer is no" in first_part or "answer is 'no'" in first_part or 'answer is "no"' in first_part:
+            elif "the answer is no" in response_text or "answer is 'no'" in response_text or 'answer is "no"' in response_text or "therefore, no" in response_text:
                 has_fabrication = False
             else:
-                # Fallback: check for positive indicators (avoid false positives from negations)
-                has_fabrication = any([
-                    "contains fabricated" in response_text and "does not contain fabricated" not in response_text,
-                    "is fabricated" in response_text or "are fabricated" in response_text,
-                ])
+                # Fallback: Look for definitive statements about fabrication
+                # Check last 200 chars for final verdict
+                last_part = response_text[-200:]
+                if "contains fabricated" in last_part or "contains unsourced" in last_part or "is yes" in last_part:
+                    has_fabrication = True
+                elif "does not contain fabricated" in last_part or "is no" in last_part:
+                    has_fabrication = False
 
             print(f"🔍 Fabrication: {has_fabrication} - {response_text[:200]}...")
 
