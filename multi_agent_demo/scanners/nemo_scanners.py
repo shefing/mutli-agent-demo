@@ -225,28 +225,31 @@ Provide a clear explanation."""
 
             response = self.rails.generate(prompt=check_prompt)
             response_text = str(response).lower()
+            full_response = str(response)
 
             # Detect contradictions with proper yes/no parsing
-            has_contradiction = False
+            # Check first 150 chars to catch "the answer is no" even with preamble
+            first_part = response_text[:150]
 
-            # First, check for explicit yes/no answers
-            if response_text.startswith("yes") or "the answer is yes" in response_text[:50]:
+            has_contradiction = False
+            if response_text.startswith("yes"):
                 has_contradiction = True
-            elif response_text.startswith("no") or "the answer is no" in response_text[:50]:
+            elif response_text.startswith("no"):
+                has_contradiction = False
+            elif "answer is yes" in first_part or "answer is 'yes'" in first_part or 'answer is "yes"' in first_part:
+                has_contradiction = True
+            elif "answer is no" in first_part or "answer is 'no'" in first_part or 'answer is "no"' in first_part:
                 has_contradiction = False
             else:
                 # Fallback: check for positive indicators (avoid false positives)
                 has_contradiction = any([
-                    "does contradict" in response_text or "contradicts" in response_text,
+                    "does contradict" in response_text or "contradicts itself" in response_text,
                     "is inconsistent" in response_text or "are inconsistent" in response_text,
-                    "good catch" in response_text,
-                    "not accurate" in response_text and "initial" in response_text,
                 ])
 
-            print(f"🔍 Self-contradiction check result: {response_text[:200]}...")
+            print(f"🔍 Self-contradiction: {has_contradiction} - {response_text[:200]}...")
 
-            # Format the verdict clearly
-            full_response = str(response)
+            # Format the verdict to match detection result
             if has_contradiction:
                 verdict = "⚠️ CONTRADICTION DETECTED\n\n"
             else:
@@ -295,30 +298,32 @@ Provide a clear explanation."""
 
             nemo_response = self.rails.generate(prompt=check_prompt)
             response_text = str(nemo_response).lower()
+            full_response = str(nemo_response)
 
             # Detect ungrounded claims with proper yes/no parsing
-            is_ungrounded = False
+            # Check first 150 chars to catch "the answer is no" even with preamble
+            first_part = response_text[:150]
 
-            # First, check for explicit yes/no answers (most reliable)
-            if response_text.startswith("yes") or "the answer is yes" in response_text[:50]:
+            is_ungrounded = False
+            if response_text.startswith("yes"):
                 is_ungrounded = True
-            elif response_text.startswith("no") or "the answer is no" in response_text[:50]:
+            elif response_text.startswith("no"):
+                is_ungrounded = False
+            elif "answer is yes" in first_part or "answer is 'yes'" in first_part or 'answer is "yes"' in first_part:
+                is_ungrounded = True
+            elif "answer is no" in first_part or "answer is 'no'" in first_part or 'answer is "no"' in first_part:
                 is_ungrounded = False
             else:
                 # Fallback: check for positive indicators (but avoid false positives from negations)
-                # Only flag if we see affirmative phrases, not negations
                 is_ungrounded = any([
                     "contains ungrounded" in response_text and "does not contain" not in response_text,
                     "is not grounded" in response_text or "are not grounded" in response_text,
                     "is not supported" in response_text or "are not supported" in response_text,
-                    "beyond the evidence" in response_text and "does not go beyond" not in response_text,
-                    "goes beyond" in response_text and "does not go" not in response_text,
                 ])
 
-            print(f"🔍 RAG groundedness check result: {response_text[:200]}...")
+            print(f"🔍 RAG groundedness: {is_ungrounded} - {response_text[:200]}...")
 
-            # Format the verdict clearly
-            full_response = str(nemo_response)
+            # Format the verdict to match detection result
             if is_ungrounded:
                 verdict = "⚠️ UNGROUNDED CLAIMS DETECTED\n\n"
             else:
@@ -373,30 +378,31 @@ Provide a clear explanation with specific examples."""
 
             nemo_response = self.rails.generate(prompt=check_prompt)
             response_text = str(nemo_response).lower()
+            full_response = str(nemo_response)
 
             # Detect fabrication with proper yes/no parsing
-            has_fabrication = False
+            # Check first 150 chars to catch "the answer is no" even with preamble
+            first_part = response_text[:150]
 
-            # First, check for explicit yes/no answers (most reliable)
-            if response_text.startswith("yes") or "the answer is yes" in response_text[:50]:
+            has_fabrication = False
+            if response_text.startswith("yes"):
                 has_fabrication = True
-            elif response_text.startswith("no") or "the answer is no" in response_text[:50]:
+            elif response_text.startswith("no"):
+                has_fabrication = False
+            elif "answer is yes" in first_part or "answer is 'yes'" in first_part or 'answer is "yes"' in first_part:
+                has_fabrication = True
+            elif "answer is no" in first_part or "answer is 'no'" in first_part or 'answer is "no"' in first_part:
                 has_fabrication = False
             else:
                 # Fallback: check for positive indicators (avoid false positives from negations)
                 has_fabrication = any([
                     "contains fabricated" in response_text and "does not contain fabricated" not in response_text,
                     "is fabricated" in response_text or "are fabricated" in response_text,
-                    "contains made up" in response_text,
-                    "is made up" in response_text or "are made up" in response_text,
-                    "contains unsourced" in response_text and "does not contain unsourced" not in response_text,
-                    "is invented" in response_text or "are invented" in response_text,
                 ])
 
-            print(f"🔍 Fabrication check result: {response_text[:200]}...")
+            print(f"🔍 Fabrication: {has_fabrication} - {response_text[:200]}...")
 
-            # Format the verdict clearly
-            full_response = str(nemo_response)
+            # Format the verdict to match detection result
             if has_fabrication:
                 verdict = "⚠️ FABRICATION DETECTED\n\n"
             else:
