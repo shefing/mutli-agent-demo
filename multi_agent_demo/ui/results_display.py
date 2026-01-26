@@ -233,9 +233,9 @@ def _render_nemo_results(result: dict):
                     detailed_analysis = scanner_result.get("detailed_analysis", {})
                     per_message_findings = scanner_result.get("per_message_findings", [])
 
-                    # Show which checks were performed (using consistent negative forms)
+                    # Show which checks were performed
                     st.markdown("**Checks Performed:**")
-                    check_cols = st.columns(3)
+                    check_cols = st.columns(2)
                     with check_cols[0]:
                         if checks.get("self_contradiction"):
                             st.markdown("✅ Self-Contradiction")
@@ -246,11 +246,6 @@ def _render_nemo_results(result: dict):
                             st.markdown("✅ RAG Ungroundedness")
                         else:
                             st.markdown("➖ RAG Ungroundedness")
-                    with check_cols[2]:
-                        if checks.get("fabrication"):
-                            st.markdown("✅ Fabrication")
-                        else:
-                            st.markdown("➖ Fabrication")
 
                     # Show detected issues summary
                     if issues:
@@ -259,9 +254,7 @@ def _render_nemo_results(result: dict):
                             if issue == "Self-Contradiction":
                                 st.error(f"⚠️ **{issue}**: Agent contradicted previous statements")
                             elif issue == "RAG Ungroundedness":
-                                st.error(f"⚠️ **{issue}**: Response not grounded in provided evidence")
-                            elif issue == "Fabrication":
-                                st.error(f"⚠️ **{issue}**: Unsourced or false claims detected")
+                                st.error(f"⚠️ **{issue}**: Claims made without evidence support (includes fabricated details, unverified APIs, procedures, or features)")
                             else:
                                 st.error(f"⚠️ {issue}")
 

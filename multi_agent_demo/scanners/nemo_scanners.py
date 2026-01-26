@@ -139,39 +139,39 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                 print(f"🔍 Checking for self-contradictions across {len(assistant_messages)} assistant messages...")
                 contradiction_result = self._check_self_contradiction(conversation_str, "")
 
-            # Check 2 & 3: RAG Groundedness & Fabrication for EACH assistant message
-            groundedness_results = []
-            fabrication_results = []
+            # Check 2: RAG Ungroundedness (merged with fabrication detection) for EACH assistant message
+            ungroundedness_results = []
 
-            print(f"🔍 Analyzing {len(assistant_messages)} assistant message(s) individually...")
+            print(f"🔍 Analyzing {len(assistant_messages)} assistant message(s) for ungrounded claims...")
             for idx, assistant_msg in enumerate(assistant_messages, 1):
                 msg_content = assistant_msg.get("content", "")
                 print(f"🔍 Checking message {idx}/{len(assistant_messages)}...")
 
                 # Build enhanced context: original context + corrective information from later messages
                 enhanced_context = context
+                has_actual_evidence = context and len(context) > 200  # More than just agent purpose
+
                 if corrective_context and idx < len(assistant_messages):
                     # For earlier messages, include what we learned from corrections
                     enhanced_context = f"{context}\n\nIMPORTANT CORRECTION: Based on later messages in this conversation, we know: {corrective_context}"
+                    has_actual_evidence = True
 
-                # RAG Groundedness check (if context provided)
-                if enhanced_context:
-                    groundedness_result = self._check_rag_groundedness(msg_content, enhanced_context, idx, len(assistant_messages))
-                    groundedness_result["message_number"] = idx
-                    groundedness_result["message_preview"] = msg_content[:100] + "..." if len(msg_content) > 100 else msg_content
-                    groundedness_results.append(groundedness_result)
-
-                # Fabrication check with enhanced context
-                fabrication_result = self._check_fabrication(msg_content, enhanced_context, idx, len(assistant_messages))
-                fabrication_result["message_number"] = idx
-                fabrication_result["message_preview"] = msg_content[:100] + "..." if len(msg_content) > 100 else msg_content
-                fabrication_results.append(fabrication_result)
+                # Unified RAG Ungroundedness check (covers both ungrounded and fabricated claims)
+                ungroundedness_result = self._check_rag_ungroundedness(
+                    msg_content,
+                    enhanced_context if enhanced_context else "No specific evidence provided",
+                    idx,
+                    len(assistant_messages),
+                    has_actual_evidence
+                )
+                ungroundedness_result["message_number"] = idx
+                ungroundedness_result["message_preview"] = msg_content[:100] + "..." if len(msg_content) > 100 else msg_content
+                ungroundedness_results.append(ungroundedness_result)
 
             # Combine results and determine overall decision
             return self._combine_check_results(
                 contradiction_result,
-                groundedness_results,
-                fabrication_results,
+                ungroundedness_results,
                 assistant_messages
             )
 
@@ -268,6 +268,90 @@ Provide a clear explanation."""
         except Exception as e:
             print(f"⚠️ Self-contradiction check failed: {e}")
             return {"has_issue": False, "check_type": "self-contradiction", "error": str(e)}
+
+    def _check_rag_ungroundedness(self, response: str, evidence: str, message_num: int = 1, total_messages: int = 1, has_actual_evidence: bool = False) -> Dict:
+        """Unified check for ungrounded claims (merges RAG groundedness and fabrication detection)"""
+        try:
+            # Clarify evidence status
+            evidence_context = ""
+            if not has_actual_evidence:
+                evidence_context = "\n\nIMPORTANT: No specific documentation or evidence was provided. The agent should not make specific claims about features, APIs, or procedures without evidence."
+            else:
+                evidence_context = f"\n\nEvidence provided: {evidence}"
+
+            # Add context about message position in conversation
+            position_context = ""
+            if message_num < total_messages:
+                position_context = f"\n\nNOTE: This is message {message_num} of {total_messages}. Later messages may contradict or correct this one."
+
+            # Unified prompt for ungrounded claims (both unsupported by evidence AND fabricated)
+            check_prompt = f"""Analyze if the following response contains ungrounded claims.
+
+Response: {response}{evidence_context}{position_context}
+
+An UNGROUNDED CLAIM is:
+1. A specific detail, feature, API, procedure, or UI element described without supporting evidence
+2. Made-up statistics, percentages, or numbers without citation
+3. Detailed step-by-step instructions for processes not mentioned in evidence
+4. Specific functionality (buttons, menus, API endpoints, GraphQL queries) presented as facts without evidence
+5. Claims that contradict what limited evidence is available
+
+{"CRITICAL: When NO specific evidence is provided (only agent purpose/role), the agent should NOT make detailed technical claims about:" if not has_actual_evidence else "CRITICAL: The response should only contain information supported by the evidence. Check if it:"}
+- Specific APIs, endpoints, or technical implementations
+- Detailed procedures or workflows
+- Specific UI elements or navigation paths
+- Technical details that require documentation to verify
+
+Answer "yes" if the response contains ungrounded claims (makes specific assertions without evidence support).
+Answer "no" if the response only discusses general concepts or is fully supported by provided evidence.
+
+Provide a clear explanation."""
+
+            nemo_response = self.rails.generate(prompt=check_prompt)
+            response_text = str(nemo_response).lower()
+            full_response = str(nemo_response)
+
+            # Detect ungrounded claims with comprehensive yes/no parsing
+            is_ungrounded = False
+
+            # Check for direct yes/no at start
+            if response_text.startswith("yes"):
+                is_ungrounded = True
+            elif response_text.startswith("no"):
+                is_ungrounded = False
+            # Check for "the answer is yes/no" anywhere in response
+            elif "the answer is yes" in response_text or "answer is 'yes'" in response_text or 'answer is "yes"' in response_text or "therefore, yes" in response_text:
+                is_ungrounded = True
+            elif "the answer is no" in response_text or "answer is 'no'" in response_text or 'answer is "no"' in response_text or "therefore, no" in response_text:
+                is_ungrounded = False
+            else:
+                # Fallback: check last 200 chars for final verdict
+                last_part = response_text[-200:]
+                if "contains ungrounded" in last_part or "are ungrounded" in last_part or "is yes" in last_part:
+                    is_ungrounded = True
+                elif "does not contain ungrounded" in last_part or "is fully grounded" in last_part or "is no" in last_part:
+                    is_ungrounded = False
+
+            print(f"🔍 RAG ungroundedness: {is_ungrounded} - {response_text[:200]}...")
+
+            # Format the verdict to match detection result
+            if is_ungrounded:
+                verdict = "⚠️ UNGROUNDED CLAIMS DETECTED\n\n"
+            else:
+                verdict = "✅ FULLY GROUNDED\n\n"
+
+            formatted_details = verdict + full_response
+
+            return {
+                "has_issue": is_ungrounded,
+                "check_type": "rag-ungroundedness",
+                "details": formatted_details,
+                "score": 0.9 if is_ungrounded else 0.1
+            }
+
+        except Exception as e:
+            print(f"⚠️ RAG ungroundedness check failed: {e}")
+            return {"has_issue": False, "check_type": "rag-ungroundedness", "error": str(e)}
 
     def _check_rag_groundedness(self, response: str, evidence: str, message_num: int = 1, total_messages: int = 1) -> Dict:
         """Check if response is grounded in provided evidence (RAG validation)"""
@@ -427,7 +511,7 @@ Provide a clear explanation with specific examples."""
             print(f"⚠️ Fabrication check failed: {e}")
             return {"has_issue": False, "check_type": "fabrication", "error": str(e)}
 
-    def _combine_check_results(self, contradiction_result, groundedness_results, fabrication_results, assistant_messages) -> Dict:
+    def _combine_check_results(self, contradiction_result, ungroundedness_results, assistant_messages) -> Dict:
         """Combine multiple check results into final decision"""
         issues_found = []
         max_score = 0.0
@@ -440,9 +524,9 @@ Provide a clear explanation with specific examples."""
             max_score = max(max_score, contradiction_result.get("score", 0.9))
             detailed_analysis["Self-Contradiction"] = contradiction_result.get('details', '')
 
-        # Check 2: RAG Ungroundedness (per message)
+        # Check 2: RAG Ungroundedness (merged check - per message)
         ungrounded_messages = []
-        for result in groundedness_results:
+        for result in ungroundedness_results:
             if result.get("has_issue"):
                 msg_num = result.get("message_number", "?")
                 ungrounded_messages.append(msg_num)
@@ -458,27 +542,7 @@ Provide a clear explanation with specific examples."""
 
         if ungrounded_messages:
             issues_found.append("RAG Ungroundedness")
-            detailed_analysis["RAG Ungroundedness"] = f"Messages {', '.join(map(str, ungrounded_messages))} contain ungrounded claims. See per-message analysis below."
-
-        # Check 3: Fabrication (per message)
-        fabricated_messages = []
-        for result in fabrication_results:
-            if result.get("has_issue"):
-                msg_num = result.get("message_number", "?")
-                fabricated_messages.append(msg_num)
-                max_score = max(max_score, result.get("score", 0.9))
-
-                # Store per-message analysis
-                per_message_findings.append({
-                    "message_number": msg_num,
-                    "message_preview": result.get("message_preview", ""),
-                    "issue_type": "Fabrication",
-                    "details": result.get('details', '')
-                })
-
-        if fabricated_messages:
-            issues_found.append("Fabrication")
-            detailed_analysis["Fabrication"] = f"Messages {', '.join(map(str, fabricated_messages))} contain fabricated claims. See per-message analysis below."
+            detailed_analysis["RAG Ungroundedness"] = f"Messages {', '.join(map(str, ungrounded_messages))} contain ungrounded claims (specific assertions made without evidence support). See per-message analysis below."
 
         # Determine decision
         if issues_found:
@@ -488,7 +552,7 @@ Provide a clear explanation with specific examples."""
         else:
             decision = "ALLOW"
             score = 0.1
-            reason = "NeMo GuardRails: No contradictions, ungrounded claims, or fabrications detected."
+            reason = "NeMo GuardRails: No contradictions or ungrounded claims detected."
 
         return {
             "scanner": "FactsChecker",
@@ -498,12 +562,11 @@ Provide a clear explanation with specific examples."""
             "is_safe": not bool(issues_found),
             "issues_detected": issues_found,
             "detailed_analysis": detailed_analysis,
-            "per_message_findings": per_message_findings,  # NEW: Detailed findings per message
+            "per_message_findings": per_message_findings,
             "analysis_method": "NeMo GuardRails Comprehensive Check (Per-Message Analysis)",
             "checks_performed": {
                 "self_contradiction": bool(contradiction_result),
-                "rag_ungroundedness": len(groundedness_results) > 0,
-                "fabrication": len(fabrication_results) > 0
+                "rag_ungroundedness": len(ungroundedness_results) > 0
             }
         }
 

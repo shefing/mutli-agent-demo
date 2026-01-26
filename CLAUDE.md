@@ -65,10 +65,9 @@ The application is organized into specialized modules for maintainability:
   - **PromptGuard Scanner**: Pre-execution input validation to detect malicious prompts and prompt injections
   - **AlignmentCheck Scanner**: Runtime behavioral monitoring to detect goal hijacking and behavioral drift
 - **NeMo GuardRails Integration** (1 scanner - NVIDIA's AI-powered content safety):
-  - **FactChecker Scanner**: Comprehensive AI-powered validation using GPT-4o-mini with three detection modes:
+  - **FactChecker Scanner**: Comprehensive AI-powered validation using GPT-4o-mini with two detection modes:
     - **Self-Contradiction**: Identifies inconsistencies across agent responses
-    - **RAG Ungroundedness**: Detects responses not grounded in retrieved evidence
-    - **Fabrication**: Detects unsourced statistics and false claims
+    - **RAG Ungroundedness**: Detects ungrounded claims (includes fabricated details, unsourced statistics, unverified APIs/procedures, and any specific assertions made without evidence support)
 
 ## Environment Configuration
 Required environment variables in `.env`:
