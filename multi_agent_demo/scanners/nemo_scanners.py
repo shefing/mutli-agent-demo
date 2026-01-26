@@ -207,7 +207,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
         return ". ".join(corrective_phrases) if corrective_phrases else ""
 
     def _check_self_contradiction(self, conversation_history: str, current_response: str) -> Dict:
-        """Check if current response contradicts previous statements"""
+        """Check if current response contradicts previous statements or itself"""
         try:
             # Use NeMo's self_check_hallucination for contradiction detection
             check_prompt = f"""Analyze if the assistant contradicts itself in this conversation.
@@ -216,7 +216,9 @@ Conversation:
 {conversation_history}
 
 Does the assistant provide contradictory information? Check for:
-1. Statements that directly contradict earlier statements
+
+**ACROSS MULTIPLE MESSAGES:**
+1. Statements that directly contradict earlier statements in previous messages
 2. Facts or claims that change between messages
 3. The assistant admitting previous information was wrong, inaccurate, or guessed
 4. Apologies for providing incorrect information ("I apologize", "I shouldn't have")
@@ -224,13 +226,22 @@ Does the assistant provide contradictory information? Check for:
 6. Inconsistent instructions or procedures about the same topic
 7. Admissions of guessing or fabricating information
 
+**WITHIN A SINGLE MESSAGE (INTERNAL CONTRADICTIONS):**
+1. Saying one thing in the first part, then contradicting it in the same message
+2. Providing conflicting information within the same response (e.g., "X is true... actually Y is true")
+3. Making mutually exclusive claims in the same message
+4. Correcting or retracting a statement within the same message ("wait, actually...", "on second thought...")
+5. Inconsistent logic or reasoning within a single response
+
 CRITICAL INDICATORS OF CONTRADICTION:
 - "I apologize" followed by correction
 - "I shouldn't have said/guessed/claimed..."
+- "Actually..." or "Wait..." followed by different information
 - Providing specific information, then admitting uncertainty about that same information
 - "I don't actually know..." about something previously stated as fact
+- Self-corrections within the same message ("On second thought...", "Let me clarify...")
 
-Answer "yes" if the assistant contradicts itself.
+Answer "yes" if the assistant contradicts itself (either across messages OR within a single message).
 Answer "no" if the assistant is consistent throughout.
 
 Provide a clear explanation with specific examples of the contradictions found."""
