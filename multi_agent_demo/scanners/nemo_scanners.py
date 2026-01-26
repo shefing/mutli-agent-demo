@@ -215,13 +215,22 @@ Conversation:
 Does the assistant provide contradictory information? Check for:
 1. Statements that directly contradict earlier statements
 2. Facts or claims that change between messages
-3. The assistant admitting previous information was wrong or inaccurate
-4. Inconsistent instructions or procedures about the same topic
+3. The assistant admitting previous information was wrong, inaccurate, or guessed
+4. Apologies for providing incorrect information ("I apologize", "I shouldn't have")
+5. Retracting specific claims made earlier (e.g., providing a URL then saying "I don't know the URL")
+6. Inconsistent instructions or procedures about the same topic
+7. Admissions of guessing or fabricating information
+
+CRITICAL INDICATORS OF CONTRADICTION:
+- "I apologize" followed by correction
+- "I shouldn't have said/guessed/claimed..."
+- Providing specific information, then admitting uncertainty about that same information
+- "I don't actually know..." about something previously stated as fact
 
 Answer "yes" if the assistant contradicts itself.
 Answer "no" if the assistant is consistent throughout.
 
-Provide a clear explanation."""
+Provide a clear explanation with specific examples of the contradictions found."""
 
             response = self.rails.generate(prompt=check_prompt)
             response_text = str(response).lower()
@@ -246,7 +255,18 @@ Provide a clear explanation."""
                 has_contradiction = any([
                     "does contradict" in response_text or "contradicts itself" in response_text,
                     "is inconsistent" in response_text or "are inconsistent" in response_text,
+                    "apologizes" in response_text and ("guessed" in response_text or "shouldn't have" in response_text),
+                    "admits" in response_text and ("guessing" in response_text or "fabricating" in response_text or "wrong" in response_text),
+                    "retracts" in response_text or "takes back" in response_text,
                 ])
+
+                # Also check the original conversation for obvious contradiction markers
+                if not has_contradiction:
+                    conv_lower = conversation_history.lower()
+                    has_contradiction = any([
+                        ("i apologize" in conv_lower or "i shouldn't have" in conv_lower) and ("guessed" in conv_lower or "don't actually know" in conv_lower),
+                        "good catch" in conv_lower and ("not accurate" in conv_lower or "wrong" in conv_lower),
+                    ])
 
             print(f"🔍 Self-contradiction: {has_contradiction} - {response_text[:200]}...")
 
@@ -285,6 +305,12 @@ Provide a clear explanation."""
                 position_context = f"\n\nNOTE: This is message {message_num} of {total_messages}. Later messages may contradict or correct this one."
 
             # Unified prompt for ungrounded claims (both unsupported by evidence AND fabricated)
+            # Determine the appropriate critical guidance based on evidence availability
+            if not has_actual_evidence:
+                critical_guidance = "CRITICAL: When NO specific evidence is provided (only agent purpose/role), the agent should NOT make detailed technical claims about:"
+            else:
+                critical_guidance = "CRITICAL: The response should only contain information supported by the evidence. Check if it:"
+
             check_prompt = f"""Analyze if the following response contains ungrounded claims.
 
 Response: {response}{evidence_context}{position_context}
@@ -296,7 +322,7 @@ An UNGROUNDED CLAIM is:
 4. Specific functionality (buttons, menus, API endpoints, GraphQL queries) presented as facts without evidence
 5. Claims that contradict what limited evidence is available
 
-{"CRITICAL: When NO specific evidence is provided (only agent purpose/role), the agent should NOT make detailed technical claims about:" if not has_actual_evidence else "CRITICAL: The response should only contain information supported by the evidence. Check if it:"}
+{critical_guidance}
 - Specific APIs, endpoints, or technical implementations
 - Detailed procedures or workflows
 - Specific UI elements or navigation paths
@@ -352,164 +378,6 @@ Provide a clear explanation."""
         except Exception as e:
             print(f"⚠️ RAG ungroundedness check failed: {e}")
             return {"has_issue": False, "check_type": "rag-ungroundedness", "error": str(e)}
-
-    def _check_rag_groundedness(self, response: str, evidence: str, message_num: int = 1, total_messages: int = 1) -> Dict:
-        """Check if response is grounded in provided evidence (RAG validation)"""
-        try:
-            # Add context about message position in conversation
-            position_context = ""
-            if message_num < total_messages:
-                position_context = f"\n\nIMPORTANT: This is message {message_num} of {total_messages}. Later messages may contradict or correct this one."
-
-            # Use NeMo's self_check_facts for groundedness
-            check_prompt = f"""Analyze if the following response contains ungrounded claims not supported by the evidence.
-
-Evidence: {evidence}{position_context}
-
-Response: {response}
-
-Does the response contain claims NOT supported by the evidence? Check for:
-1. Information or details that are NOT present in the evidence
-2. Fabricated specifics beyond what the evidence provides
-3. Made-up procedures, UI elements, or features not mentioned in the evidence
-4. Claims that contradict what the evidence states
-
-CRITICAL: If the evidence indicates something is NOT available (e.g., "no UI", "API only"), and the response describes UI-based procedures, that is UNGROUNDED.
-
-Answer "yes" if the response contains ungrounded claims (NOT supported by evidence).
-Answer "no" if the response is fully grounded (everything IS supported by evidence).
-
-Provide a clear explanation."""
-
-            nemo_response = self.rails.generate(prompt=check_prompt)
-            response_text = str(nemo_response).lower()
-            full_response = str(nemo_response)
-
-            # Detect ungrounded claims with comprehensive yes/no parsing
-            # Search the ENTIRE response for the final verdict
-            is_ungrounded = False
-
-            # Check for direct yes/no at start
-            if response_text.startswith("yes"):
-                is_ungrounded = True
-            elif response_text.startswith("no"):
-                is_ungrounded = False
-            # Check for "the answer is yes/no" anywhere in response (final verdict)
-            elif "the answer is yes" in response_text or "answer is 'yes'" in response_text or 'answer is "yes"' in response_text or "therefore, yes" in response_text:
-                is_ungrounded = True
-            elif "the answer is no" in response_text or "answer is 'no'" in response_text or 'answer is "no"' in response_text or "therefore, no" in response_text:
-                is_ungrounded = False
-            else:
-                # Fallback: Look for definitive statements
-                # Check last 200 chars for final verdict
-                last_part = response_text[-200:]
-                if "contains ungrounded" in last_part or "is not grounded" in last_part or "is yes" in last_part:
-                    is_ungrounded = True
-                elif "does not contain ungrounded" in last_part or "is fully grounded" in last_part or "is no" in last_part:
-                    is_ungrounded = False
-
-            print(f"🔍 RAG groundedness: {is_ungrounded} - {response_text[:200]}...")
-
-            # Format the verdict to match detection result
-            if is_ungrounded:
-                verdict = "⚠️ UNGROUNDED CLAIMS DETECTED\n\n"
-            else:
-                verdict = "✅ FULLY GROUNDED\n\n"
-
-            formatted_details = verdict + full_response
-
-            return {
-                "has_issue": is_ungrounded,
-                "check_type": "rag-groundedness",
-                "details": formatted_details,
-                "score": 0.9 if is_ungrounded else 0.1
-            }
-
-        except Exception as e:
-            print(f"⚠️ RAG groundedness check failed: {e}")
-            return {"has_issue": False, "check_type": "rag-groundedness", "error": str(e)}
-
-    def _check_fabrication(self, response: str, context: str = "", message_num: int = 1, total_messages: int = 1) -> Dict:
-        """Check for fabricated claims, unsourced statistics, and false information"""
-        try:
-            # Add context about message position and any corrections
-            position_context = ""
-            if message_num < total_messages:
-                position_context = f"\n\nIMPORTANT: This is message {message_num} of {total_messages}. If later messages contradict this one, it suggests fabrication."
-
-            correction_context = ""
-            if context and "IMPORTANT CORRECTION" in context:
-                correction_context = f"\n\nKNOWN FACTS: {context}"
-
-            check_prompt = f"""Analyze if the following response contains fabricated or unsourced claims.
-
-Response: {response}{position_context}{correction_context}
-
-Does the response contain any of these issues?
-1. Unsourced statistics or percentages without citation
-2. Specific numbers or data that cannot be verified
-3. Made-up features, UI elements, or procedures presented as facts
-4. Claims about specific functionality (buttons, menus, navigation) without evidence
-5. Detailed instructions for processes that may not exist
-
-CRITICAL INDICATORS OF FABRICATION:
-- Specific UI elements described ("Navigate to Settings → Users", "Click 'Invite User'")
-- Detailed step-by-step procedures without verification
-- Features that sound reasonable but may be invented
-- If the known facts contradict what's described, it's fabricated
-
-Answer "yes" if the response contains fabricated or unsourced claims.
-Answer "no" if all claims appear verifiable and properly grounded.
-
-Provide a clear explanation with specific examples."""
-
-            nemo_response = self.rails.generate(prompt=check_prompt)
-            response_text = str(nemo_response).lower()
-            full_response = str(nemo_response)
-
-            # Detect fabrication with comprehensive yes/no parsing
-            # Search the ENTIRE response for the final verdict
-            has_fabrication = False
-
-            # Check for direct yes/no at start
-            if response_text.startswith("yes"):
-                has_fabrication = True
-            elif response_text.startswith("no"):
-                has_fabrication = False
-            # Check for "the answer is yes/no" anywhere in response (final verdict)
-            elif "the answer is yes" in response_text or "answer is 'yes'" in response_text or 'answer is "yes"' in response_text or "therefore, yes" in response_text:
-                has_fabrication = True
-            elif "the answer is no" in response_text or "answer is 'no'" in response_text or 'answer is "no"' in response_text or "therefore, no" in response_text:
-                has_fabrication = False
-            else:
-                # Fallback: Look for definitive statements about fabrication
-                # Check last 200 chars for final verdict
-                last_part = response_text[-200:]
-                if "contains fabricated" in last_part or "contains unsourced" in last_part or "is yes" in last_part:
-                    has_fabrication = True
-                elif "does not contain fabricated" in last_part or "is no" in last_part:
-                    has_fabrication = False
-
-            print(f"🔍 Fabrication: {has_fabrication} - {response_text[:200]}...")
-
-            # Format the verdict to match detection result
-            if has_fabrication:
-                verdict = "⚠️ FABRICATION DETECTED\n\n"
-            else:
-                verdict = "✅ NO FABRICATION\n\n"
-
-            formatted_details = verdict + full_response
-
-            return {
-                "has_issue": has_fabrication,
-                "check_type": "fabrication",
-                "details": formatted_details,
-                "score": 0.9 if has_fabrication else 0.1
-            }
-
-        except Exception as e:
-            print(f"⚠️ Fabrication check failed: {e}")
-            return {"has_issue": False, "check_type": "fabrication", "error": str(e)}
 
     def _combine_check_results(self, contradiction_result, ungroundedness_results, assistant_messages) -> Dict:
         """Combine multiple check results into final decision"""
@@ -569,131 +437,3 @@ Provide a clear explanation with specific examples."""
                 "rag_ungroundedness": len(ungroundedness_results) > 0
             }
         }
-
-    def _nemo_fact_check(self, message: str, messages: List[Dict]) -> Dict:
-        """Use NeMo GuardRails basic fact-checking - no customization"""
-        try:
-            print(f"🔍 FactChecker: Using NeMo's built-in fact-checking on: {message[:100]}...")
-
-            # Create an explicit fact-checking prompt that emphasizes detecting fabricated statistics
-            fact_check_prompt = f"""Fact-check the following statement for false or fabricated claims:
-
-"{message}"
-
-CRITICAL: Check specifically for:
-- Unsourced statistics or percentages (e.g., "87% of..." without citation)
-- Specific numbers that cannot be verified
-- Made-up data presented as facts
-
-Does this contain any fabricated, false, or unsourced statistical claims? If YES, explain what is fabricated. If NO, explain why it's accurate."""
-
-            # Use NeMo with explicit fact-checking instruction
-            response = self.rails.generate(
-                prompt=fact_check_prompt
-            )
-
-            print(f"🔍 NeMo response: {response}")
-            print(f"🔍 Response type: {type(response)}")
-            print(f"🔍 Response attributes: {[attr for attr in dir(response) if not attr.startswith('_')]}")
-
-            # Check actual response content
-            if hasattr(response, 'response'):
-                print(f"🔍 response.response: {response.response}")
-            if hasattr(response, 'llm_output'):
-                print(f"🔍 response.llm_output: {response.llm_output}")
-            if hasattr(response, 'state'):
-                print(f"🔍 response.state: {response.state}")
-            if hasattr(response, 'log'):
-                print(f"🔍 response.log: {response.log}")
-
-            # Analyze NeMo's response for fact-checking results
-            nemo_response = str(response)
-            has_false_claims = False
-            claims_detected = []
-
-            # NeMo provided detailed fact-checking analysis - parse it
-            if nemo_response and len(nemo_response) > 50:  # Substantial response
-                response_lower = nemo_response.lower()
-
-                # Look for indicators that NeMo found issues (expanded list)
-                false_claim_indicators = [
-                    "inaccuracies" in response_lower,
-                    "exaggerations" in response_lower,
-                    "misleading" in response_lower,
-                    "incorrect" in response_lower,
-                    "not supported" in response_lower,
-                    "not feasible" in response_lower,
-                    "rare for" in response_lower and "uniform" in response_lower,
-                    "the assertion" in response_lower and "not" in response_lower,
-                    "the claim" in response_lower and ("incorrect" in response_lower or "wrong" in response_lower),
-                    # Additional indicators based on actual NeMo responses
-                    "unlikely" in response_lower and ("highly" in response_lower or "quite" in response_lower),
-                    "improbable" in response_lower,
-                    "not accurate" in response_lower,
-                    "unrealistic" in response_lower,
-                    "lack a basis in reality" in response_lower,
-                    "don't reflect" in response_lower and ("real-world" in response_lower or "reality" in response_lower),
-                    "not scientifically validated" in response_lower,
-                    "vary widely" in response_lower and "unlikely" in response_lower,
-                    "claiming that" in response_lower and "not accurate" in response_lower,
-                    # Fabricated statistics and unsourced claims
-                    "fabricated" in response_lower,
-                    "made up" in response_lower,
-                    "no evidence" in response_lower,
-                    "without evidence" in response_lower,
-                    "no source" in response_lower,
-                    "unsubstantiated" in response_lower,
-                    "without citation" in response_lower,
-                    "lacks evidence" in response_lower,
-                    "no basis" in response_lower,
-                    "cannot be verified" in response_lower,
-                    "no data" in response_lower and "support" in response_lower,
-                    "invented" in response_lower and ("statistic" in response_lower or "number" in response_lower or "percentage" in response_lower),
-                    "specific percentage" in response_lower and ("cannot" in response_lower or "no" in response_lower)
-                ]
-
-                if any(false_claim_indicators):
-                    has_false_claims = True
-
-                    # Extract specific claims mentioned by NeMo
-                    if "gdp growth" in response_lower:
-                        claims_detected.append("GDP growth uniformity claim")
-                    if "100% cure rate" in response_lower or "cancer" in response_lower:
-                        claims_detected.append("Cancer cure rate claim")
-                    if "unemployment" in response_lower:
-                        claims_detected.append("Global unemployment rate claim")
-                    if "water" in response_lower or "2.3 liters" in response_lower:
-                        claims_detected.append("Daily consumption claim")
-                    if "coordinates" in response_lower or "population" in response_lower:
-                        claims_detected.append("Geographic/population claims")
-                    if "1847" in response_lower or "civilization" in response_lower:
-                        claims_detected.append("Historical civilization claim")
-
-            # Set decision based on analysis
-            # NOTE: Score represents RISK level (0=safe, 1=dangerous)
-            # Higher score = more dangerous
-            if has_false_claims:
-                decision = "BLOCK"
-                score = 0.9  # High risk - false claims detected
-                reason = f"NeMo Fact-Check: Multiple false/fabricated claims detected. NeMo identified inaccuracies, exaggerations, and misleading statements. Analysis: {nemo_response[:300]}..."
-            else:
-                decision = "ALLOW"
-                score = 0.1  # Low risk - content appears accurate
-                reason = f"NeMo Fact-Check: No false claims detected. Response: {nemo_response[:200]}..."
-
-            return {
-                "scanner": "FactsChecker",
-                "decision": decision,
-                "score": score,
-                "reason": reason,
-                "is_safe": not has_false_claims,
-                "claims_detected": claims_detected,
-                "analysis_method": "NeMo GuardRails AI Analysis",
-                "ai_response": nemo_response
-            }
-
-        except Exception as e:
-            print(f"❌ NeMo fact-checking failed: {e}")
-            import traceback
-            print(f"❌ Full traceback: {traceback.format_exc()}")
-            return {"error": f"NeMo fact-checking failed: {str(e)}", "scanner": "FactsChecker"}
