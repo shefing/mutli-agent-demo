@@ -40,10 +40,15 @@ def _render_result_summary(result: dict):
     # Check NeMo results
     for scanner_result in result.get("nemo_results", {}).values():
         if "error" not in scanner_result:
-            if not scanner_result["is_safe"]:
+            decision = scanner_result.get("decision", "")
+            if decision == "BLOCK":
                 blocked_count += 1
-            else:
+            elif decision == "WARNING":
+                warning_count += 1
+            elif scanner_result["is_safe"]:
                 safe_count += 1
+            else:
+                blocked_count += 1
         else:
             error_count += 1
 
@@ -193,11 +198,16 @@ def _render_nemo_results(result: dict):
         for scanner_name, scanner_result in nemo_results.items():
             st.subheader(f"{scanner_name} Scanner")
             if "error" not in scanner_result:
-                # Decision indicator
-                if scanner_result["is_safe"]:
-                    st.success(f"✅ {scanner_result['decision']}")
+                # Decision indicator with severity levels
+                decision = scanner_result['decision']
+                if decision == "BLOCK":
+                    st.error(f"🚫 {decision}")
+                elif decision == "WARNING":
+                    st.warning(f"⚠️ {decision}")
+                elif scanner_result["is_safe"]:
+                    st.success(f"✅ {decision}")
                 else:
-                    st.error(f"🚫 {scanner_result['decision']}")
+                    st.error(f"🚫 {decision}")
 
                 # Risk gauge - FULL gauge = DANGER, EMPTY gauge = SAFE
                 # Always red, fill level indicates risk

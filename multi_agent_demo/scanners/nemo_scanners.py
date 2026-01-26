@@ -133,10 +133,13 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             # If an assistant later corrects itself, use that as evidence of what's true
             corrective_context = self._extract_corrective_context(assistant_messages)
 
-            # Check 1: Self-Contradiction Detection (if multiple assistant messages)
+            # Check 1: Self-Contradiction Detection (always run, even for single messages)
             contradiction_result = None
-            if len(assistant_messages) > 1:
-                print(f"🔍 Checking for self-contradictions across {len(assistant_messages)} assistant messages...")
+            if len(assistant_messages) >= 1:
+                if len(assistant_messages) == 1:
+                    print(f"🔍 Checking for internal self-contradictions within single message...")
+                else:
+                    print(f"🔍 Checking for self-contradictions across {len(assistant_messages)} assistant messages...")
                 contradiction_result = self._check_self_contradiction(conversation_str, "")
 
             # Check 2: RAG Ungroundedness (merged with fabrication detection) for EACH assistant message
@@ -382,23 +385,28 @@ Provide a clear explanation."""
     def _combine_check_results(self, contradiction_result, ungroundedness_results, assistant_messages) -> Dict:
         """Combine multiple check results into final decision"""
         issues_found = []
+        warnings_found = []
         max_score = 0.0
         detailed_analysis = {}
         per_message_findings = []
 
-        # Check 1: Self-Contradiction (across all messages)
+        # Check 1: Self-Contradiction (BLOCKING - across all messages)
+        has_contradiction = False
         if contradiction_result and contradiction_result.get("has_issue"):
+            has_contradiction = True
             issues_found.append("Self-Contradiction")
             max_score = max(max_score, contradiction_result.get("score", 0.9))
             detailed_analysis["Self-Contradiction"] = contradiction_result.get('details', '')
 
-        # Check 2: RAG Ungroundedness (merged check - per message)
+        # Check 2: RAG Ungroundedness (WARNING - per message)
         ungrounded_messages = []
         for result in ungroundedness_results:
             if result.get("has_issue"):
                 msg_num = result.get("message_number", "?")
                 ungrounded_messages.append(msg_num)
-                max_score = max(max_score, result.get("score", 0.9))
+                # Don't use ungroundedness score for blocking decision
+                if not has_contradiction:
+                    max_score = max(max_score, result.get("score", 0.6))
 
                 # Store per-message analysis
                 per_message_findings.append({
@@ -409,26 +417,41 @@ Provide a clear explanation."""
                 })
 
         if ungrounded_messages:
-            issues_found.append("RAG Ungroundedness")
+            warnings_found.append("RAG Ungroundedness")
             detailed_analysis["RAG Ungroundedness"] = f"Messages {', '.join(map(str, ungrounded_messages))} contain ungrounded claims (specific assertions made without evidence support). See per-message analysis below."
 
-        # Determine decision
-        if issues_found:
+        # Determine decision based on severity
+        # BLOCK: Self-contradiction found (blocking issue)
+        # WARNING: Only ungroundedness found (warning, not blocking)
+        # ALLOW: Neither found
+        if has_contradiction:
             decision = "BLOCK"
             score = max_score
-            reason = f"NeMo GuardRails detected: {', '.join(issues_found)}"
+            reason = f"NeMo GuardRails BLOCKED: Self-Contradiction detected"
+            if warnings_found:
+                reason += f" (also found warnings: {', '.join(warnings_found)})"
+            is_safe = False
+        elif warnings_found:
+            decision = "WARNING"
+            score = max_score  # Use warning score (lower than blocking)
+            reason = f"NeMo GuardRails WARNING: {', '.join(warnings_found)}"
+            is_safe = True  # Warnings don't make it unsafe, just flagged
         else:
             decision = "ALLOW"
             score = 0.1
             reason = "NeMo GuardRails: No contradictions or ungrounded claims detected."
+            is_safe = True
+
+        # Combine issues and warnings for display
+        all_findings = issues_found + warnings_found
 
         return {
             "scanner": "FactsChecker",
             "decision": decision,
             "score": score,
             "reason": reason,
-            "is_safe": not bool(issues_found),
-            "issues_detected": issues_found,
+            "is_safe": is_safe,
+            "issues_detected": all_findings,  # All findings for display
             "detailed_analysis": detailed_analysis,
             "per_message_findings": per_message_findings,
             "analysis_method": "NeMo GuardRails Comprehensive Check (Per-Message Analysis)",
