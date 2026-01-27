@@ -49,7 +49,7 @@ def render_sidebar():
         scanner_info = {
             "AlignmentCheck": "🎯 Detects goal hijacking",
             "PromptGuard": "🔍 Detects malicious user inputs",
-            "FactsChecker": "📊 Detects self-contradictions & ungrounded claims (fabricated details without evidence)",
+            "FactsChecker": "📊 Detects self-contradictions & ungrounded claims (potentially fabricated details without evidence)",
             "DataDisclosureGuard": "🔐 Detects PII disclosure & validates intent"
         }
 

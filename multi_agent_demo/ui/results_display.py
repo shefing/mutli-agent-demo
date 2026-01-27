@@ -300,7 +300,7 @@ def _render_nemo_results(result: dict):
                             if issue == "Self-Contradiction":
                                 st.error(f"⚠️ **{issue}**: Agent contradicted previous statements")
                             elif issue == "RAG Ungroundedness":
-                                st.error(f"⚠️ **{issue}**: Claims made without evidence support (includes fabricated details, unverified APIs, procedures, or features)")
+                                st.error(f"⚠️ **{issue}**: Claims made without evidence support (includes potentially fabricated details, unverified APIs, procedures, or features)")
                             else:
                                 st.error(f"⚠️ {issue}")
 
@@ -312,29 +312,29 @@ def _render_nemo_results(result: dict):
                         # Show per-message findings (for RAG Ungroundedness and Fabrication)
                         if per_message_findings:
                             st.markdown("---")
-                            st.markdown("**📋 Per-Message Analysis:**")
-                            st.caption("Each assistant message was analyzed individually")
+                            with st.expander("📋 Per-Message Analysis", expanded=True):
+                                st.caption("Each assistant message was analyzed individually")
 
-                            # Group findings by message number
-                            findings_by_message = {}
-                            for finding in per_message_findings:
-                                msg_num = finding["message_number"]
-                                if msg_num not in findings_by_message:
-                                    findings_by_message[msg_num] = []
-                                findings_by_message[msg_num].append(finding)
+                                # Group findings by message number
+                                findings_by_message = {}
+                                for finding in per_message_findings:
+                                    msg_num = finding["message_number"]
+                                    if msg_num not in findings_by_message:
+                                        findings_by_message[msg_num] = []
+                                    findings_by_message[msg_num].append(finding)
 
-                            # Display findings per message
-                            for msg_num in sorted(findings_by_message.keys()):
-                                findings = findings_by_message[msg_num]
-                                issues_list = [f["issue_type"] for f in findings]
+                                # Display findings per message
+                                for msg_num in sorted(findings_by_message.keys()):
+                                    findings = findings_by_message[msg_num]
+                                    issues_list = [f["issue_type"] for f in findings]
 
-                                st.markdown(f"**Message {msg_num}:** {', '.join(issues_list)}")
-                                st.caption(f"_Preview:_ {findings[0]['message_preview']}")
+                                    st.markdown(f"**Message {msg_num}:** {', '.join(issues_list)}")
+                                    st.caption(f"_Preview:_ {findings[0]['message_preview']}")
 
-                                # Show detailed analysis for each issue type in this message
-                                for finding in findings:
-                                    with st.expander(f"🔍 Message {msg_num} - {finding['issue_type']} Details"):
-                                        st.text(finding['details'])
+                                    # Show detailed analysis for each issue type in this message
+                                    for finding in findings:
+                                        with st.expander(f"🔍 Message {msg_num} - {finding['issue_type']} Details"):
+                                            st.text(finding['details'])
 
                 # Special handling for DataDisclosureGuard PII findings
                 if scanner_name == "DataDisclosureGuard" and "pii_findings" in scanner_result:

@@ -331,7 +331,7 @@ Response: {response}{evidence_context}{position_context}
 
 An UNGROUNDED CLAIM is:
 1. A specific detail, feature, API, procedure, or UI element described without supporting evidence
-2. Made-up statistics, percentages, or numbers without citation
+2. Potentially fabricated statistics, percentages, or numbers without citation
 3. Detailed step-by-step instructions for processes not mentioned in evidence
 4. Specific functionality (buttons, menus, API endpoints, GraphQL queries) presented as facts without evidence
 5. Claims that contradict what limited evidence is available
