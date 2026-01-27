@@ -128,9 +128,179 @@ class DataDisclosureGuardScanner:
             print(f"⚠️ Traceback: {traceback.format_exc()}")
             self.presidio_available = False
 
+    def _is_in_curl_command(self, text: str, entity: Dict) -> bool:
+        """
+        Check if entity is within a curl/wget command block
+
+        Args:
+            text: Full text being analyzed
+            entity: Detected entity with start, end, type
+
+        Returns:
+            True if entity is in curl command, False otherwise
+        """
+        # Find the nearest 'curl' or 'wget' before the entity
+        search_start = max(0, entity["start"] - 1000)  # Look back up to 1000 chars
+        before_text = text[search_start:entity["start"]]
+
+        # Check if there's a curl/wget command before this entity
+        curl_idx = before_text.rfind('curl ')
+        wget_idx = before_text.rfind('wget ')
+
+        if curl_idx == -1 and wget_idx == -1:
+            return False
+
+        # Find the command start position
+        cmd_start = max(curl_idx, wget_idx)
+
+        # Check if we've left the curl command (look for newline without backslash continuation)
+        after_cmd = before_text[cmd_start:]
+
+        # Count lines - if we see a blank line or a line without \, we've left the command
+        lines = after_cmd.split('\n')
+        in_command = True
+        for i, line in enumerate(lines[:-1]):  # Check all but the last line
+            if not line.strip().endswith('\\') and i < len(lines) - 1:
+                # This line doesn't continue, so if there are more lines, we've left the command
+                next_line = lines[i + 1].strip()
+                if not next_line or not next_line.startswith('-'):
+                    in_command = False
+                    break
+
+        return in_command
+
+    def _is_technical_context(self, text: str, entity: Dict) -> bool:
+        """
+        Check if a detected entity is in a technical context (not actual PII)
+
+        Args:
+            text: Full text being analyzed
+            entity: Detected entity with start, end, type, text
+
+        Returns:
+            True if this is technical data (false positive), False if likely real PII
+        """
+        entity_text = entity["text"]
+        entity_type = entity["type"]
+
+        # Get surrounding context (100 chars before and after for better detection)
+        start = max(0, entity["start"] - 100)
+        end = min(len(text), entity["end"] + 100)
+        context = text[start:end].lower()
+
+        # Check if inside a curl/wget command (very common source of false positives)
+        if self._is_in_curl_command(text, entity):
+            print(f"   ℹ️  Filtering out {entity_type} '{entity_text}' - inside curl/wget command")
+            return True
+
+        # Technical context indicators
+        technical_indicators = [
+            # JSON/API structure
+            '"sku":', '"product_id":', '"productid":', '"item_id":', '"itemid":',
+            '"session_id":', '"sessionid":', '"session":', '"cookie":',
+            '"token":', '"access_token":', '"refresh_token":', '"api_key":',
+            '"id":', '"uuid":', '"tracking_id":', '"order_id":', '"orderid":',
+            '"timestamp":', '"ts":', '"created_at":', '"updated_at":',
+
+            # URL patterns
+            'productpage.', '/product/', '/item/', '?id=', '&id=',
+            'utm_', '.html', '.htm', '/api/', 'articlenumber=',
+
+            # HTTP headers/curl
+            'x-forwarded-for:', 'x-real-ip:', 'user-agent:', 'cookie:',
+            'authorization:', 'bearer ', 'set-cookie:', '-h ', '--header',
+
+            # E-commerce specific
+            'sku:', 'asin:', 'gtin:', 'ean:', 'upc:',
+            'variant_id:', 'style_id:', 'color_id:',
+
+            # Code/script patterns
+            '```', 'code:', 'script:', '<script', '</script>',
+        ]
+
+        # Check if entity is in technical context
+        for indicator in technical_indicators:
+            if indicator in context:
+                print(f"   ℹ️  Filtering out {entity_type} '{entity_text}' - found technical context: '{indicator}'")
+                return True
+
+        # Check if inside a URL (common for product IDs)
+        if 'http://' in context or 'https://' in context:
+            # Check if entity is part of URL path or query string
+            if any(sep in context[max(0, entity["start"]-start-10):entity["end"]-start+10]
+                   for sep in ['/', '?', '&', '=', '.']):
+                print(f"   ℹ️  Filtering out {entity_type} '{entity_text}' - inside URL")
+                return True
+
+        # IP address specific filtering
+        if entity_type == "IP_ADDRESS":
+            # Check if this is a version number (e.g., Chrome/139.0.0.0 or Safari/537.36)
+            # Look for patterns like "Chrome/", "Safari/", "Firefox/" before the number
+            if any(browser in context for browser in [
+                'chrome/', 'safari/', 'firefox/', 'edge/', 'opera/',
+                'applewebkit/', 'gecko/', 'version/'
+            ]):
+                print(f"   ℹ️  Filtering out IP_ADDRESS '{entity_text}' - browser/software version number")
+                return True
+
+            # Filter out if in headers, curl commands, or technical logs
+            if any(header in context for header in [
+                'x-forwarded-for', 'x-real-ip', 'remote-addr', 'client-ip',
+                'curl ', 'wget ', 'http header', 'accept:', 'content-type:',
+                'user-agent:', 'forwarded'
+            ]):
+                print(f"   ℹ️  Filtering out IP_ADDRESS '{entity_text}' - in HTTP/technical context")
+                return True
+
+        # Phone number specific filtering
+        if entity_type == "PHONE_NUMBER":
+            # If it looks like a product ID (in URL, has "product" nearby)
+            if any(keyword in context for keyword in [
+                'product', 'item', 'sku', '.html', '/product', 'productpage',
+                'articlenumber', 'variant', 'style'
+            ]):
+                print(f"   ℹ️  Filtering out PHONE_NUMBER '{entity_text}' - likely product/item ID")
+                return True
+
+            # Timestamp-like numbers (unix timestamps often look like phone numbers)
+            if len(entity_text) == 10 and entity_text.startswith('17'):
+                # Unix timestamps in seconds starting with 17 (years 2023+)
+                print(f"   ℹ️  Filtering out PHONE_NUMBER '{entity_text}' - likely timestamp")
+                return True
+
+        # SSN/Passport specific filtering
+        if entity_type in ["US_SSN", "US_PASSPORT"]:
+            # If in JSON with technical keys or e-commerce context
+            if any(keyword in context for keyword in [
+                '"sku"', 'variant', 'product', 'item', 'asin', 'gtin',
+                'session', 'cookie', 'token', 'timestamp'
+            ]):
+                print(f"   ℹ️  Filtering out {entity_type} '{entity_text}' - likely SKU/product code/session data")
+                return True
+
+        # Bank number specific filtering
+        if entity_type == "US_BANK_NUMBER":
+            # Timestamp-like numbers (unix timestamps often detected as bank numbers)
+            if len(entity_text) >= 10 and entity_text.startswith('17'):
+                # Unix timestamps in milliseconds or seconds starting with 17 (years 2023+)
+                print(f"   ℹ️  Filtering out US_BANK_NUMBER '{entity_text}' - likely timestamp")
+                return True
+
+            # If looks like product/order/session ID
+            if any(keyword in context for keyword in [
+                'product', 'order', 'item', 'sku', '.html', '/product',
+                'session', 'cookie', 'token', 'timestamp', 'tracking',
+                'expires', 'max-age', 'domain=', 'path=', 'samesite'
+            ]):
+                print(f"   ℹ️  Filtering out US_BANK_NUMBER '{entity_text}' - likely product/order/session ID")
+                return True
+
+        return False
+
     def detect_pii(self, text: str) -> List[Dict]:
         """
         Detect PII entities in text using Presidio with custom recognizers
+        and context-aware filtering
 
         Args:
             text: Text to analyze for PII
@@ -158,20 +328,32 @@ class DataDisclosureGuardScanner:
 
             # Log what was detected for debugging
             if results:
-                print(f"🔍 DataDisclosureGuard detected PII in: '{text[:100]}'")
-                for r in results:
-                    print(f"   - {r.entity_type}: '{text[r.start:r.end]}' (score: {r.score})")
+                print(f"🔍 DataDisclosureGuard detected {len(results)} potential PII matches in: '{text[:100]}'")
 
-            # Format results
+            # Format results and filter out technical false positives
             pii_entities = []
+            filtered_count = 0
+
             for result in results:
-                pii_entities.append({
+                entity = {
                     "type": result.entity_type,
                     "start": result.start,
                     "end": result.end,
                     "score": result.score,
                     "text": text[result.start:result.end]
-                })
+                }
+
+                # Check if this is technical data (false positive)
+                if self._is_technical_context(text, entity):
+                    filtered_count += 1
+                    continue
+
+                # Real PII detected
+                print(f"   ✓ {result.entity_type}: '{text[result.start:result.end]}' (score: {result.score})")
+                pii_entities.append(entity)
+
+            if filtered_count > 0:
+                print(f"   📊 Filtered out {filtered_count} technical false positive(s), {len(pii_entities)} real PII remain")
 
             return pii_entities
 
