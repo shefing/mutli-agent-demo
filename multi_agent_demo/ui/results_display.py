@@ -37,17 +37,32 @@ def _render_result_summary(result: dict):
             blocked_count += 1  # Errors are treated as blocked
 
     # Check NeMo results
-    for scanner_result in result.get("nemo_results", {}).values():
+    # Special handling for FactsChecker - count both blocking issues AND warnings separately
+    for scanner_name, scanner_result in result.get("nemo_results", {}).items():
         if "error" not in scanner_result:
-            decision = scanner_result.get("decision", "")
-            if decision == "BLOCK":
-                blocked_count += 1
-            elif decision == "WARNING":
-                warning_count += 1
-            elif scanner_result["is_safe"]:
-                safe_count += 1
+            if scanner_name == "FactsChecker" and "issues_detected" in scanner_result:
+                # Count specific issue types for FactsChecker
+                issues = scanner_result.get("issues_detected", [])
+                has_blocking = "Self-Contradiction" in issues
+                has_warning = "RAG Ungroundedness" in issues
+
+                if has_blocking:
+                    blocked_count += 1
+                if has_warning:
+                    warning_count += 1
+                if not has_blocking and not has_warning:
+                    safe_count += 1
             else:
-                blocked_count += 1
+                # Other scanners - use decision field
+                decision = scanner_result.get("decision", "")
+                if decision == "BLOCK":
+                    blocked_count += 1
+                elif decision == "WARNING":
+                    warning_count += 1
+                elif scanner_result["is_safe"]:
+                    safe_count += 1
+                else:
+                    blocked_count += 1
         else:
             blocked_count += 1  # Errors are treated as blocked
 
@@ -133,6 +148,10 @@ def _render_alignment_check_results(result: dict):
         fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
         st.plotly_chart(fig_gauge, use_container_width=True, key="alignment_check_gauge")
 
+        # Explain what the score means
+        st.caption("📊 **Risk Score:** 0.0-0.3 = Safe (green) | 0.3-0.7 = Warning (yellow) | 0.7-1.0 = Danger (red)")
+        st.caption(f"🔍 **This score ({ac_result['score']:.1f}):** {'Low risk - agent behavior is aligned' if ac_result['score'] < 0.3 else 'Medium risk - potential concerns detected' if ac_result['score'] < 0.7 else 'High risk - significant misalignment detected'}")
+
         # Determine analysis type and display compactly
         reason = ac_result['reason']
         reason_lower = reason.lower()
@@ -155,7 +174,10 @@ def _render_alignment_check_results(result: dict):
             with st.expander("🔍 Alignment Analysis", expanded=not ac_result["is_safe"]):
                 st.markdown(f"<small>{reason}</small>", unsafe_allow_html=True)
     else:
-        st.error(f"Error: {ac_result['error']}")
+        st.error(f"❌ AlignmentCheck Error")
+        st.markdown(ac_result['error'])
+        if 'retry_hint' in ac_result:
+            st.info(f"💡 **Tip:** {ac_result['retry_hint']}")
 
 
 def _render_prompt_guard_results(result: dict):
@@ -269,6 +291,17 @@ def _render_nemo_results(result: dict):
                 fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
                 st.plotly_chart(fig_gauge, use_container_width=True, key=f"{scanner_name.lower()}_gauge")
 
+                # Explain what the score means
+                st.caption("📊 **Risk Score:** 0.0-0.3 = Safe (green) | 0.3-0.7 = Warning (yellow) | 0.7-1.0 = Danger (red)")
+                score_explanation = ""
+                if scanner_result['score'] < 0.3:
+                    score_explanation = "Low risk - content appears safe"
+                elif scanner_result['score'] < 0.7:
+                    score_explanation = "Medium risk - potential issues detected"
+                else:
+                    score_explanation = "High risk - significant concerns detected"
+                st.caption(f"🔍 **This score ({scanner_result['score']:.1f}):** {score_explanation}")
+
                 # Show analysis with expandable full response
                 st.info(f"**Analysis:** {scanner_result['reason']}")
 
@@ -376,7 +409,10 @@ def _render_nemo_results(result: dict):
                     with st.expander("🔍 View Full NeMo Analysis"):
                         st.text(scanner_result['ai_response'])
             else:
-                st.error(f"Error: {scanner_result['error']}")
+                st.error(f"❌ {scanner_name} Scanner Error")
+                st.markdown(scanner_result['error'])
+                if 'retry_hint' in scanner_result:
+                    st.info(f"💡 **Tip:** {scanner_result['retry_hint']}")
 
 
 def _render_history_chart():
