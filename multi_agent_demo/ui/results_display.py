@@ -12,11 +12,10 @@ def _render_result_summary(result: dict):
     """Render overall test result summary at the top"""
     st.subheader("📊 Test Results Summary")
 
-    # Count results
+    # Count results (3 categories: Blocked, Warnings, Safe)
     blocked_count = 0
     safe_count = 0
     warning_count = 0
-    error_count = 0
 
     # Check AlignmentCheck
     if result["alignment_check"] and "error" not in result["alignment_check"]:
@@ -25,17 +24,17 @@ def _render_result_summary(result: dict):
         else:
             safe_count += 1
     elif result["alignment_check"] and "error" in result["alignment_check"]:
-        error_count += 1
+        blocked_count += 1  # Errors are treated as blocked
 
     # Check PromptGuard
     for pg in result.get("prompt_guard", []):
         if "error" not in pg:
             if not pg["is_safe"]:
-                blocked_count += 1  # Changed from warning_count to blocked_count
+                blocked_count += 1
             else:
                 safe_count += 1
         else:
-            error_count += 1
+            blocked_count += 1  # Errors are treated as blocked
 
     # Check NeMo results
     for scanner_result in result.get("nemo_results", {}).values():
@@ -50,10 +49,10 @@ def _render_result_summary(result: dict):
             else:
                 blocked_count += 1
         else:
-            error_count += 1
+            blocked_count += 1  # Errors are treated as blocked
 
-    # Display summary
-    col1, col2, col3, col4 = st.columns(4)
+    # Display summary (3 columns only)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         st.metric("🚫 Blocked", blocked_count)
@@ -61,16 +60,12 @@ def _render_result_summary(result: dict):
         st.metric("⚠️ Warnings", warning_count)
     with col3:
         st.metric("✅ Safe", safe_count)
-    with col4:
-        st.metric("❌ Errors", error_count)
 
-    # Overall verdict
+    # Overall verdict (3 states only)
     if blocked_count > 0:
-        st.error("🚨 **OVERALL: BLOCKED** - One or more scanners detected threats")
+        st.error("🚨 **OVERALL: BLOCKED** - One or more scanners detected threats or errors")
     elif warning_count > 0:
         st.warning("⚠️ **OVERALL: WARNING** - Potential risks detected")
-    elif error_count > 0:
-        st.info("ℹ️ **OVERALL: ERRORS** - Some scanners encountered errors")
     else:
         st.success("✅ **OVERALL: SAFE** - All scanners passed")
 
@@ -167,26 +162,67 @@ def _render_prompt_guard_results(result: dict):
     """Render PromptGuard scanner results"""
     st.subheader("PromptGuard Scanner")
     if result["prompt_guard"]:
-        for pg_result in result["prompt_guard"]:
-            if "error" not in pg_result:
-                if pg_result["is_safe"]:
-                    st.success(f"✅ Safe: {pg_result['message']}")
-                else:
-                    # Show the reason (what was detected) instead of just the message
-                    reason = pg_result.get('reason', 'Prompt injection detected')
-                    st.error(f"🚫 Blocked: {reason}")
-                    # Show the truncated message as additional context
-                    st.caption(f"Input: {pg_result['message']}")
-                st.caption(f"Score: {pg_result.get('score', 'N/A')} | Decision: {pg_result.get('decision', 'N/A')}")
+        # Analyze results to create summary
+        blocked_messages = []
+        safe_messages = []
+        error_messages = []
+
+        for idx, pg_result in enumerate(result["prompt_guard"], 1):
+            if "error" in pg_result:
+                error_messages.append(idx)
+            elif not pg_result["is_safe"]:
+                blocked_messages.append(idx)
             else:
-                # Check if this is a Streamlit Cloud compatibility issue
-                if "streamlit_cloud_note" in pg_result:
-                    st.error(f"⚠️ **Streamlit Cloud Compatibility Issue**")
-                    st.warning("PromptGuard scanner uses models that may not be compatible with Streamlit Cloud's environment. This scanner works on local deployments.")
-                    with st.expander("🔍 Technical Details"):
-                        st.code(pg_result['error'])
-                else:
-                    st.error(f"Error: {pg_result['error']}")
+                safe_messages.append(idx)
+
+        # Show overall decision
+        if error_messages:
+            st.error("🚫 BLOCKED (Scanner Error)")
+        elif blocked_messages:
+            st.error("🚫 BLOCKED")
+        else:
+            st.success("✅ ALLOW")
+
+        # Show summary message
+        total_messages = len(result["prompt_guard"])
+        if blocked_messages:
+            blocked_str = ', '.join(map(str, blocked_messages))
+            st.info(f"**Analysis:** Messages {blocked_str} contain malicious patterns or prompt injection attempts. See per-message analysis below.")
+        elif error_messages:
+            error_str = ', '.join(map(str, error_messages))
+            st.info(f"**Analysis:** Scanner encountered errors on messages {error_str}. See details below.")
+        else:
+            st.info(f"**Analysis:** All {total_messages} user message(s) are safe - no malicious patterns detected.")
+
+        # Show per-message details only if there are issues (blocked or errors)
+        if blocked_messages or error_messages:
+            st.markdown("---")
+            st.markdown("**📋 Per-Message Analysis:**")
+            st.caption("Only showing messages with issues")
+
+            for idx, pg_result in enumerate(result["prompt_guard"], 1):
+                # Only show if this message has an issue
+                if idx in blocked_messages or idx in error_messages:
+                    if "error" not in pg_result:
+                        # Blocked message
+                        reason = pg_result.get('reason', 'Prompt injection detected')
+                        st.markdown(f"**Message {idx}:** 🚫 Blocked")
+                        with st.expander(f"🔍 View Message {idx} Details"):
+                            st.error(f"**Detection:** {reason}")
+                            st.caption(f"**Input Preview:** {pg_result['message']}")
+                            st.caption(f"**Score:** {pg_result.get('score', 'N/A')} | **Decision:** {pg_result.get('decision', 'N/A')}")
+                    else:
+                        # Error message
+                        st.markdown(f"**Message {idx}:** ❌ Error")
+                        # Check if this is a Streamlit Cloud compatibility issue
+                        if "streamlit_cloud_note" in pg_result:
+                            with st.expander(f"🔍 View Message {idx} Error Details"):
+                                st.error(f"⚠️ **Streamlit Cloud Compatibility Issue**")
+                                st.warning("PromptGuard scanner uses models that may not be compatible with Streamlit Cloud's environment. This scanner works on local deployments.")
+                                st.code(pg_result['error'])
+                        else:
+                            with st.expander(f"🔍 View Message {idx} Error Details"):
+                                st.error(f"Error: {pg_result['error']}")
     else:
         st.info("🔒 No user messages to scan with PromptGuard")
 
