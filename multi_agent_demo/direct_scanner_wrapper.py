@@ -5,6 +5,7 @@ to avoid Streamlit Cloud compatibility issues
 
 import os
 import requests
+import time
 from typing import Dict, List
 
 def scan_alignment_check_direct(messages: List[Dict], purpose: str) -> Dict:
@@ -216,12 +217,50 @@ Keep your response concise. Do NOT provide commentary on unused rules or hypothe
             "temperature": 0.1
         }
 
-        response = requests.post(
-            "https://api.together.xyz/v1/chat/completions",  # Updated endpoint
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
+        # Retry logic for handling 503 service unavailable errors
+        max_retries = 3
+        retry_delay = 1  # Start with 1 second
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    "https://api.together.xyz/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
+                )
+
+                # If successful, break out of retry loop
+                if response.status_code == 200:
+                    break
+
+                # If 503 (service unavailable), retry with backoff
+                if response.status_code == 503 and attempt < max_retries - 1:
+                    print(f"⚠️ Together API unavailable (503), retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+
+                # Other errors or final 503 - will be handled below
+                break
+
+            except requests.exceptions.Timeout:
+                if attempt < max_retries - 1:
+                    print(f"⚠️ Together API timeout, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    return {
+                        "error": "Together API timeout after multiple retries. The service may be overloaded. Please try again in a few minutes.",
+                        "scanner": "AlignmentCheck",
+                        "retry_hint": "Service is experiencing high load. Try again later."
+                    }
+            except requests.exceptions.RequestException as e:
+                return {
+                    "error": f"Together API connection error: {str(e)}",
+                    "scanner": "AlignmentCheck"
+                }
 
         if response.status_code == 200:
             result = response.json()
@@ -306,10 +345,37 @@ Keep your response concise. Do NOT provide commentary on unused rules or hypothe
                 "method": "direct_api"
             }
         else:
-            return {
-                "error": f"Together API error: {response.status_code} - {response.text}",
-                "scanner": "AlignmentCheck"
-            }
+            # Provide user-friendly error messages based on status code
+            if response.status_code == 503:
+                error_msg = (
+                    "Together AI service is currently unavailable (503 error). "
+                    "This is a temporary issue on their end. "
+                    "\n\n**Solutions:**\n"
+                    "1. Wait a few minutes and try again\n"
+                    "2. Check Together AI status: https://status.together.ai/\n"
+                    "3. The service may be experiencing high load during peak hours"
+                )
+                return {
+                    "error": error_msg,
+                    "scanner": "AlignmentCheck",
+                    "retry_hint": "Service temporarily unavailable. Try again in a few minutes."
+                }
+            elif response.status_code == 429:
+                return {
+                    "error": "Together AI rate limit exceeded. Please wait before retrying.",
+                    "scanner": "AlignmentCheck",
+                    "retry_hint": "Rate limit exceeded. Wait 60 seconds."
+                }
+            elif response.status_code == 401:
+                return {
+                    "error": "Together API authentication failed. Check TOGETHER_API_KEY environment variable.",
+                    "scanner": "AlignmentCheck"
+                }
+            else:
+                return {
+                    "error": f"Together API error: {response.status_code} - {response.text}",
+                    "scanner": "AlignmentCheck"
+                }
 
     except Exception as e:
         return {"error": str(e), "scanner": "AlignmentCheck"}
