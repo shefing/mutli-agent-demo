@@ -10,7 +10,7 @@ short_description: AI Agent Guards Testing - Security scanners for LLM agents
 app_port: 8501
 ---
 
-# AI Agent Guards Testing Application
+# AI Agent Guards Behavioral Monitoring Platform
 
 A comprehensive demonstration application for testing AI Agent security scanners and behavioral monitoring. Features real-time security testing with multiple scanners and post-hoc behavioral analysis using OpenTelemetry traces.
 
