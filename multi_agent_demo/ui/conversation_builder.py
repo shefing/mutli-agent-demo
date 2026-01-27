@@ -10,6 +10,24 @@ from datetime import datetime
 def render_conversation_builder():
     """Render the conversation builder UI"""
 
+    # Custom CSS to reduce markdown heading sizes in conversation display
+    st.markdown("""
+        <style>
+        /* Reduce h2 (##) heading size in conversation */
+        .stMarkdown h2 {
+            font-size: 1.2rem !important;
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        /* Reduce h3 (###) heading size in conversation */
+        .stMarkdown h3 {
+            font-size: 1.1rem !important;
+            margin-top: 0.4rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # Agent Configuration
     st.subheader("🎯 Agent Purpose")
     purpose = st.text_area(
@@ -124,8 +142,8 @@ def _render_message_display(index: int, msg: dict):
         with st.chat_message("user"):
             col_msg, col_btns = st.columns([4, 1])
             with col_msg:
-                # Use st.text() which doesn't interpret markdown at all
-                st.text(msg["content"])
+                # Render markdown for better formatting (headings, bold, tables, etc.)
+                st.markdown(msg["content"])
             with col_btns:
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
@@ -143,12 +161,12 @@ def _render_message_display(index: int, msg: dict):
                 if msg.get("action"):
                     st.write(f"**Action:** `{msg['action']}`")
                     st.write("**Thought:**")
-                    st.text(msg["content"])
+                    st.markdown(msg["content"])
                     if msg.get("action_input"):
                         st.json(msg["action_input"])
                 else:
-                    # Use st.text() which doesn't interpret markdown at all
-                    st.text(msg["content"])
+                    # Render markdown for better formatting (headings, bold, tables, etc.)
+                    st.markdown(msg["content"])
             with col_btns:
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:

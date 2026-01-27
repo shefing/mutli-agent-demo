@@ -307,7 +307,7 @@ def _render_nemo_results(result: dict):
                             # Show overall analysis for this issue type
                             if issue in detailed_analysis:
                                 with st.expander(f"🔍 View {issue} Overall Summary"):
-                                    st.markdown(detailed_analysis[issue])
+                                    st.text(detailed_analysis[issue])
 
                         # Show per-message findings (for RAG Ungroundedness and Fabrication)
                         if per_message_findings:
@@ -334,7 +334,7 @@ def _render_nemo_results(result: dict):
                                 # Show detailed analysis for each issue type in this message
                                 for finding in findings:
                                     with st.expander(f"🔍 Message {msg_num} - {finding['issue_type']} Details"):
-                                        st.markdown(finding['details'])
+                                        st.text(finding['details'])
 
                 # Special handling for DataDisclosureGuard PII findings
                 if scanner_name == "DataDisclosureGuard" and "pii_findings" in scanner_result:
