@@ -67,9 +67,10 @@ This project includes comprehensive documentation organized by topic:
   - Detection patterns and scoring
   - Testing and troubleshooting
 
-### Deployment
+### Deployment & CI/CD
 - **[HF_SPACES_DEPLOYMENT.md](./HF_SPACES_DEPLOYMENT.md)** - Deploy to Hugging Face Spaces (5 minutes)
 - **[STREAMLIT_CLOUD_FIX.md](./STREAMLIT_CLOUD_FIX.md)** - Streamlit Cloud deployment fixes
+- **[GITHUB_ACTIONS_SETUP.md](./GITHUB_ACTIONS_SETUP.md)** - GitHub Actions CI/CD with Slack notifications
 
 ### Technical Documentation
 - **[IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)** - Technical architecture overview
@@ -703,16 +704,58 @@ mutli-agent-demo/
 
 ### Testing
 
-```bash
-# Run with sample data
-streamlit run multi_agent_demo/app.py
+The project includes automated tests to verify scanner functionality and data processing.
 
+#### Test Files
+
+| Test File | Purpose | What It Tests |
+|-----------|---------|---------------|
+| `test_data_disclosure_fix.py` | DataDisclosureGuard false positive filtering | Verifies technical data (product IDs, SKUs, browser versions, timestamps) are NOT flagged as PII |
+| `test_alignment_fix.py` | DataDisclosureGuard alignment checking | Verifies misaligned PII disclosure (e.g., asking for SSN when requesting weather) is correctly detected |
+| `test_deviations.py` | Deviation and bias detection | Tests temporal deviations (refunds increasing over time) and bias patterns (age bias in hiring) |
+| `test_alignment.py` | Interactive AlignmentCheck testing | Menu-driven interface for testing AlignmentCheck scanner |
+
+#### Running Tests
+
+**Run all tests:**
+```bash
+source venv/bin/activate
+
+# Run DataDisclosureGuard false positive test
+python test_data_disclosure_fix.py
+
+# Run DataDisclosureGuard alignment test
+python test_alignment_fix.py
+
+# Run deviation/bias detection test
+python test_deviations.py
+
+# Run interactive AlignmentCheck tester
+python test_alignment.py
+```
+
+**Run individual tests:**
+```bash
+# Test false positive filtering
+python test_data_disclosure_fix.py
+
+# Expected output: ✅ TEST PASSED: No false positives detected!
+```
+
+**Quick test commands:**
+```bash
 # Test specific scanner
 python -c "from multi_agent_demo.scanners.nemo_scanners import FactCheckerScanner; scanner = FactCheckerScanner('nemo_config'); print(scanner)"
 
 # Test OTEL parsing
 python -c "import json; from multi_agent_demo.deviations.otel_parser import parse_otel_data; data = json.load(open('OTEL-hr-agent-trace.json')); print(parse_otel_data(data, {'name': 'HR Agent', 'role': 'recruiter', 'purpose': 'screen CVs'}))"
 ```
+
+#### Continuous Integration
+
+The project uses GitHub Actions to automatically run tests on commits to the `main` branch. Test failures are reported to a Slack channel for immediate notification.
+
+See `.github/workflows/test.yml` for CI configuration.
 
 ### Docker Deployment
 
