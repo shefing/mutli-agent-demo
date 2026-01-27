@@ -61,30 +61,34 @@ jobs:
 
         if [ "${{ steps.test_disclosure_fix.outcome }}" != "success" ]; then
           FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}\n- test_data_disclosure_fix.py"
+          FAILED_TESTS="${FAILED_TESTS}• test_data_disclosure_fix.py\n"
         else
           PASSED=$((PASSED + 1))
         fi
 
         if [ "${{ steps.test_alignment_fix.outcome }}" != "success" ]; then
           FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}\n- test_alignment_fix.py"
+          FAILED_TESTS="${FAILED_TESTS}• test_alignment_fix.py\n"
         else
           PASSED=$((PASSED + 1))
         fi
 
         if [ "${{ steps.test_deviations.outcome }}" != "success" ]; then
           FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}\n- test_deviations.py"
+          FAILED_TESTS="${FAILED_TESTS}• test_deviations.py\n"
         else
           PASSED=$((PASSED + 1))
         fi
 
+        # If no tests failed, set a default message
+        if [ -z "$FAILED_TESTS" ]; then
+          FAILED_TESTS="None"
+        fi
+
         echo "failed=$FAILED" >> $GITHUB_OUTPUT
         echo "passed=$PASSED" >> $GITHUB_OUTPUT
-        echo "failed_tests<<EOF" >> $GITHUB_OUTPUT
-        echo -e "$FAILED_TESTS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+        # Use single-line format for JSON compatibility
+        echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
 
         # Fail the job if any tests failed
         if [ $FAILED -gt 0 ]; then
@@ -152,7 +156,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Failed Tests:*\n${{ steps.results.outputs.failed_tests }}"
+                  "text": "*Failed Tests:*\ntest_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\ntest_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\ntest_deviations.py: ${{ steps.test_deviations.outcome }}"
                 }
               },
               {
