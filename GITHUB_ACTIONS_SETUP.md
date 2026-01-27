@@ -28,8 +28,10 @@ The workflow needs a Slack webhook URL to send notifications.
 2. Navigate to **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
 4. Name: `SLACK_WEBHOOK_URL`
-5. Value: `https://hooks.slack.com/services/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`
+5. Value: `<your-slack-webhook-url>` (the webhook URL you received from Slack)
 6. Click **Add secret**
+
+**Note**: Never commit the actual webhook URL to your repository. Always use GitHub Secrets.
 
 ### 2. Enable GitHub Actions
 
@@ -120,7 +122,7 @@ To test if the workflow is working:
   ```bash
   curl -X POST -H 'Content-type: application/json' \
     --data '{"text":"Test notification from AI Agent Guards"}' \
-    https://hooks.slack.com/services/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
+    <your-slack-webhook-url>
   ```
 - Check Slack webhook is still active (webhooks can expire if not used)
 
