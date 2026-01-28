@@ -708,12 +708,13 @@ The project includes automated tests to verify scanner functionality and data pr
 
 #### Test Files
 
-| Test File | Purpose | What It Tests |
-|-----------|---------|---------------|
-| `test_data_disclosure_fix.py` | DataDisclosureGuard false positive filtering | Verifies technical data (product IDs, SKUs, browser versions, timestamps) are NOT flagged as PII |
-| `test_alignment_fix.py` | DataDisclosureGuard alignment checking | Verifies misaligned PII disclosure (e.g., asking for SSN when requesting weather) is correctly detected |
-| `test_deviations.py` | Deviation and bias detection | Tests temporal deviations (refunds increasing over time) and bias patterns (age bias in hiring) |
-| `test_alignment.py` | Interactive AlignmentCheck testing | Menu-driven interface for testing AlignmentCheck scanner |
+| Test File | Purpose | What It Tests | API Key Required |
+|-----------|---------|---------------|------------------|
+| `test_data_disclosure_fix.py` | DataDisclosureGuard false positive filtering | Verifies technical data (product IDs, SKUs, browser versions, timestamps) are NOT flagged as PII | No |
+| `test_alignment_fix.py` | DataDisclosureGuard alignment checking | Verifies misaligned PII disclosure (e.g., asking for SSN when requesting weather) is correctly detected | No |
+| `test_deviations.py` | Deviation and bias detection | Tests temporal deviations (refunds increasing over time) and bias patterns (age bias in hiring) | No |
+| `test_alignment_check.py` | AlignmentCheck scanner automation | Tests goal hijacking detection, off-topic redirects, and aligned conversations | Yes (TOGETHER_API_KEY) |
+| `test_alignment.py` | Interactive AlignmentCheck testing | Menu-driven interface for testing AlignmentCheck scanner (legacy) | No |
 
 #### Running Tests
 
@@ -721,16 +722,16 @@ The project includes automated tests to verify scanner functionality and data pr
 ```bash
 source venv/bin/activate
 
-# Run DataDisclosureGuard false positive test
+# Core tests (no API keys required)
 python test_data_disclosure_fix.py
-
-# Run DataDisclosureGuard alignment test
 python test_alignment_fix.py
-
-# Run deviation/bias detection test
 python test_deviations.py
 
-# Run interactive AlignmentCheck tester
+# Optional: AlignmentCheck scanner test (requires TOGETHER_API_KEY)
+export TOGETHER_API_KEY=your_key_here
+python test_alignment_check.py
+
+# Interactive AlignmentCheck tester (legacy)
 python test_alignment.py
 ```
 
@@ -754,6 +755,17 @@ python -c "import json; from multi_agent_demo.deviations.otel_parser import pars
 #### Continuous Integration
 
 The project uses GitHub Actions to automatically run tests on commits to the `main` branch. Test failures are reported to a Slack channel for immediate notification.
+
+**Core Tests (Always Run):**
+- ✅ `test_data_disclosure_fix.py` - No API key required
+- ✅ `test_alignment_fix.py` - No API key required
+- ✅ `test_deviations.py` - No API key required
+
+**Optional Tests (Require API Keys):**
+- ⚠️ `test_alignment_check.py` - Requires `TOGETHER_API_KEY` in GitHub Secrets
+  - **To enable:** Add `TOGETHER_API_KEY` to repository secrets (Settings → Secrets → Actions)
+  - **Cost:** ~$0.18/1M tokens on Together AI
+  - **Usage:** Tests goal hijacking detection with live API calls
 
 See `.github/workflows/test.yml` for CI configuration.
 

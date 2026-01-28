@@ -51,14 +51,34 @@ jobs:
         python test_deviations.py
         echo "status=$?" >> $GITHUB_OUTPUT
 
+    - name: Run AlignmentCheck scanner test (optional)
+      id: test_alignment_check
+      continue-on-error: true
+      if: env.TOGETHER_API_KEY != ''
+      env:
+        TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      run: |
+        echo "Running AlignmentCheck test with API key..."
+        python test_alignment_check.py
+        echo "status=$?" >> $GITHUB_OUTPUT
+
+    - name: Skip AlignmentCheck test (no API key)
+      if: env.TOGETHER_API_KEY == ''
+      run: |
+        echo "⏭️ Skipping AlignmentCheck test (TOGETHER_API_KEY not configured)"
+        echo "   To enable: Add TOGETHER_API_KEY to GitHub repository secrets"
+
     - name: Collect test results
       id: results
       if: always()
       run: |
         FAILED=0
         PASSED=0
+        SKIPPED=0
+        TOTAL=3
         FAILED_TESTS=""
 
+        # Core tests (always run)
         if [ "${{ steps.test_disclosure_fix.outcome }}" != "success" ]; then
           FAILED=$((FAILED + 1))
           FAILED_TESTS="${FAILED_TESTS}• test_data_disclosure_fix.py\n"
@@ -80,6 +100,18 @@ jobs:
           PASSED=$((PASSED + 1))
         fi
 
+        # Optional test (AlignmentCheck - requires API key)
+        if [ "${{ steps.test_alignment_check.outcome }}" == "success" ]; then
+          PASSED=$((PASSED + 1))
+          TOTAL=$((TOTAL + 1))
+        elif [ "${{ steps.test_alignment_check.outcome }}" == "failure" ]; then
+          FAILED=$((FAILED + 1))
+          TOTAL=$((TOTAL + 1))
+          FAILED_TESTS="${FAILED_TESTS}• test_alignment_check.py\n"
+        elif [ "${{ steps.test_alignment_check.outcome }}" == "skipped" ]; then
+          SKIPPED=$((SKIPPED + 1))
+        fi
+
         # If no tests failed, set a default message
         if [ -z "$FAILED_TESTS" ]; then
           FAILED_TESTS="None"
@@ -87,7 +119,8 @@ jobs:
 
         echo "failed=$FAILED" >> $GITHUB_OUTPUT
         echo "passed=$PASSED" >> $GITHUB_OUTPUT
-        # Use single-line format for JSON compatibility
+        echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+        echo "total=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
 
         # Fail the job if any tests failed
@@ -144,11 +177,15 @@ jobs:
                 "fields": [
                   {
                     "type": "mrkdwn",
-                    "text": "*Tests Passed:* ${{ steps.results.outputs.passed }}/3"
+                    "text": "*Tests Passed:* ${{ steps.results.outputs.passed }}/${{ steps.results.outputs.total }}"
                   },
                   {
                     "type": "mrkdwn",
-                    "text": "*Tests Failed:* ${{ steps.results.outputs.failed }}/3"
+                    "text": "*Tests Failed:* ${{ steps.results.outputs.failed }}/${{ steps.results.outputs.total }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*Tests Skipped:* ${{ steps.results.outputs.skipped }}"
                   }
                 ]
               },
@@ -217,7 +254,7 @@ jobs:
                   },
                   {
                     "type": "mrkdwn",
-                    "text": "*Tests Passed:*\n3/3 ✅"
+                    "text": "*Tests Passed:*\n${{ steps.results.outputs.passed }}/${{ steps.results.outputs.total }} ✅"
                   },
                   {
                     "type": "mrkdwn",
