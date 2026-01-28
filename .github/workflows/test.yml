@@ -54,7 +54,7 @@ jobs:
     - name: Run AlignmentCheck scanner test (optional)
       id: test_alignment_check
       continue-on-error: true
-      if: env.TOGETHER_API_KEY != ''
+      if: secrets.TOGETHER_API_KEY != ''
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
       run: |
@@ -63,7 +63,7 @@ jobs:
         echo "status=$?" >> $GITHUB_OUTPUT
 
     - name: Skip AlignmentCheck test (no API key)
-      if: env.TOGETHER_API_KEY == ''
+      if: secrets.TOGETHER_API_KEY == ''
       run: |
         echo "⏭️ Skipping AlignmentCheck test (TOGETHER_API_KEY not configured)"
         echo "   To enable: Add TOGETHER_API_KEY to GitHub repository secrets"
@@ -101,15 +101,16 @@ jobs:
         fi
 
         # Optional test (AlignmentCheck - requires API key)
-        if [ "${{ steps.test_alignment_check.outcome }}" == "success" ]; then
+        # If the step didn't run (no outcome), it was skipped
+        if [ -z "${{ steps.test_alignment_check.outcome }}" ]; then
+          SKIPPED=$((SKIPPED + 1))
+        elif [ "${{ steps.test_alignment_check.outcome }}" == "success" ]; then
           PASSED=$((PASSED + 1))
           TOTAL=$((TOTAL + 1))
         elif [ "${{ steps.test_alignment_check.outcome }}" == "failure" ]; then
           FAILED=$((FAILED + 1))
           TOTAL=$((TOTAL + 1))
           FAILED_TESTS="${FAILED_TESTS}• test_alignment_check.py\n"
-        elif [ "${{ steps.test_alignment_check.outcome }}" == "skipped" ]; then
-          SKIPPED=$((SKIPPED + 1))
         fi
 
         # If no tests failed, set a default message
