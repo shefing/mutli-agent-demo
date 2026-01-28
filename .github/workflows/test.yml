@@ -54,19 +54,24 @@ jobs:
     - name: Run AlignmentCheck scanner test (optional)
       id: test_alignment_check
       continue-on-error: true
-      if: secrets.TOGETHER_API_KEY != ''
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
       run: |
+        if [ -z "$TOGETHER_API_KEY" ]; then
+          echo "⏭️ Skipping AlignmentCheck test (TOGETHER_API_KEY not configured)"
+          echo "   To enable: Add TOGETHER_API_KEY to GitHub repository secrets"
+          echo "outcome=skipped" >> $GITHUB_OUTPUT
+          exit 0
+        fi
         echo "Running AlignmentCheck test with API key..."
         python test_alignment_check.py
-        echo "status=$?" >> $GITHUB_OUTPUT
-
-    - name: Skip AlignmentCheck test (no API key)
-      if: secrets.TOGETHER_API_KEY == ''
-      run: |
-        echo "⏭️ Skipping AlignmentCheck test (TOGETHER_API_KEY not configured)"
-        echo "   To enable: Add TOGETHER_API_KEY to GitHub repository secrets"
+        TEST_RESULT=$?
+        if [ $TEST_RESULT -eq 0 ]; then
+          echo "outcome=success" >> $GITHUB_OUTPUT
+        else
+          echo "outcome=failure" >> $GITHUB_OUTPUT
+          exit $TEST_RESULT
+        fi
 
     - name: Collect test results
       id: results
@@ -101,13 +106,14 @@ jobs:
         fi
 
         # Optional test (AlignmentCheck - requires API key)
-        # If the step didn't run (no outcome), it was skipped
-        if [ -z "${{ steps.test_alignment_check.outcome }}" ]; then
+        # Check the custom outcome we set in the test step
+        ALIGNMENT_OUTCOME="${{ steps.test_alignment_check.outputs.outcome }}"
+        if [ "$ALIGNMENT_OUTCOME" == "skipped" ]; then
           SKIPPED=$((SKIPPED + 1))
-        elif [ "${{ steps.test_alignment_check.outcome }}" == "success" ]; then
+        elif [ "$ALIGNMENT_OUTCOME" == "success" ]; then
           PASSED=$((PASSED + 1))
           TOTAL=$((TOTAL + 1))
-        elif [ "${{ steps.test_alignment_check.outcome }}" == "failure" ]; then
+        elif [ "$ALIGNMENT_OUTCOME" == "failure" ]; then
           FAILED=$((FAILED + 1))
           TOTAL=$((TOTAL + 1))
           FAILED_TESTS="${FAILED_TESTS}• test_alignment_check.py\n"
