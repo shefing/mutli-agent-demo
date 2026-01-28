@@ -44,6 +44,13 @@ jobs:
         python test_alignment_fix.py
         echo "status=$?" >> $GITHUB_OUTPUT
 
+    - name: Run user-provided notification contact test
+      id: test_notification_contact
+      continue-on-error: true
+      run: |
+        python test_user_provided_notification_contact.py
+        echo "status=$?" >> $GITHUB_OUTPUT
+
     - name: Run deviation/bias detection test
       id: test_deviations
       continue-on-error: true
@@ -80,7 +87,7 @@ jobs:
         FAILED=0
         PASSED=0
         SKIPPED=0
-        TOTAL=3
+        TOTAL=4
         FAILED_TESTS=""
 
         # Core tests (always run)
@@ -94,6 +101,13 @@ jobs:
         if [ "${{ steps.test_alignment_fix.outcome }}" != "success" ]; then
           FAILED=$((FAILED + 1))
           FAILED_TESTS="${FAILED_TESTS}• test_alignment_fix.py\n"
+        else
+          PASSED=$((PASSED + 1))
+        fi
+
+        if [ "${{ steps.test_notification_contact.outcome }}" != "success" ]; then
+          FAILED=$((FAILED + 1))
+          FAILED_TESTS="${FAILED_TESTS}• test_user_provided_notification_contact.py\n"
         else
           PASSED=$((PASSED + 1))
         fi
@@ -200,7 +214,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Failed Tests:*\ntest_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\ntest_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\ntest_deviations.py: ${{ steps.test_deviations.outcome }}"
+                  "text": "*Failed Tests:*\ntest_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\ntest_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\ntest_user_provided_notification_contact.py: ${{ steps.test_notification_contact.outcome }}\ntest_deviations.py: ${{ steps.test_deviations.outcome }}"
                 }
               },
               {
