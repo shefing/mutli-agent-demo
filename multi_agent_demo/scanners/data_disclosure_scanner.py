@@ -247,9 +247,18 @@ class DataDisclosureGuardScanner:
             if any(header in context for header in [
                 'x-forwarded-for', 'x-real-ip', 'remote-addr', 'client-ip',
                 'curl ', 'wget ', 'http header', 'accept:', 'content-type:',
-                'user-agent:', 'forwarded'
+                'user-agent:', 'forwarded', 'cloudflare', 'cf_chl', 'cray:',
+                'status":403', 'status":503', 'error response', '"body":', '"response":',
+                'html>', '<!doctype', 'challenge-platform', 'orchestrate'
             ]):
                 print(f"   ℹ️  Filtering out IP_ADDRESS '{entity_text}' - in HTTP/technical context")
+                return True
+
+            # Filter out if inside JSON error responses or HTML
+            if any(json_marker in context for json_marker in [
+                '{"response":', '{"status":', '{"error":', '<!doctype', '<html'
+            ]):
+                print(f"   ℹ️  Filtering out IP_ADDRESS '{entity_text}' - in JSON/HTML error response")
                 return True
 
         # Phone number specific filtering
@@ -367,7 +376,8 @@ class DataDisclosureGuardScanner:
         self,
         pii_entities: List[Dict],
         user_intent: str,
-        message_context: str
+        message_context: str,
+        pii_findings: List[Dict]
     ) -> Dict:
         """
         Check if PII disclosure is aligned with user intent using AlignmentCheck
@@ -376,12 +386,26 @@ class DataDisclosureGuardScanner:
             pii_entities: List of detected PII entities
             user_intent: Original user intent/purpose
             message_context: The message context where PII was found
+            pii_findings: List of findings with message_type info
 
         Returns:
             Dict with alignment check result
         """
         print(f"🎯 DataDisclosureGuard: Checking alignment for {len(pii_entities)} PII entity(ies)")
         print(f"   User Intent: {user_intent}")
+
+        # Check if all PII was provided by the user (not collected by assistant)
+        user_provided_count = sum(1 for f in pii_findings if f.get("message_type") == "user")
+        assistant_collected_count = sum(1 for f in pii_findings if f.get("message_type") == "assistant")
+
+        print(f"   PII breakdown: {user_provided_count} user-provided, {assistant_collected_count} assistant-collected")
+
+        # If all PII was user-provided, it's likely aligned (user gave their own info)
+        # unless the user is being tricked/socially engineered
+        if user_provided_count > 0 and assistant_collected_count == 0:
+            print(f"   ✅ All PII was user-provided (not collected by assistant) - likely aligned with intent")
+            # Still check for social engineering / goal hijacking
+            # but use a more lenient prompt that understands user-provided data
 
         from multi_agent_demo.direct_scanner_wrapper import scan_alignment_check_direct
 
@@ -412,38 +436,52 @@ class DataDisclosureGuardScanner:
             elif line.startswith('assistant:'):
                 messages.append({"type": "assistant", "content": line.replace('assistant:', '').strip()})
 
+        # Determine if PII was user-provided or agent-collected
+        if user_provided_count > 0 and assistant_collected_count == 0:
+            context_note = "The user explicitly provided their own contact/personal information as part of their request."
+        elif assistant_collected_count > 0:
+            context_note = "The agent collected or requested personal information from the user."
+        else:
+            context_note = "Personal information was detected in the conversation."
+
         # Add a final context message
         messages.append({
             "type": "user",
-            "content": f"Review: The stated purpose was '{user_intent}'. The assistant collected {pii_summary}. Is this aligned?"
+            "content": f"Review: The stated purpose was '{user_intent}'. {context_note} {pii_summary} was detected. Is this aligned with the user's stated purpose?"
         })
 
         # Use AlignmentCheck with a very clear purpose
-        purpose = f"""Evaluate if collecting/sharing {pii_summary} is necessary and appropriate for the user's request: "{user_intent}".
+        purpose = f"""Evaluate if the presence of {pii_summary} is aligned with the user's request: "{user_intent}".
 
 IMPORTANT CONTEXT:
 - The overall purpose is: "{user_intent}"
-- The specific PII being collected: {pii_summary}
-- Consider if this PII type is reasonable for the stated purpose
+- The specific PII detected: {pii_summary}
+- {context_note}
 
 ALIGNMENT RULES:
 ✅ ALIGNED if the PII is necessary or reasonable for the stated purpose
+✅ ALIGNED if the user explicitly provided their own contact info for notifications, alerts, or communication
+✅ ALIGNED if the user is asking the agent to send something to their own email/phone/slack
 ❌ MISALIGNED if the PII is completely unrelated to the purpose
+❌ MISALIGNED if the agent is collecting unnecessary PII
 
 Examples of CLEAR MISALIGNMENT (block these):
 - User asks for weather → Assistant requests SSN (MISALIGNED - SSN unrelated to weather)
 - User asks for weather → Assistant requests credit card (MISALIGNED - payment unrelated to weather)
 - User asks for time → Assistant requests passport (MISALIGNED - passport unrelated to time)
+- User asks for news → Agent collects email without consent (MISALIGNED - unnecessary collection)
 
 Examples of ALIGNMENT (allow these):
+- User says "send to my email bob@example.com" → EMAIL_ADDRESS detected (ALIGNED - user provided for stated purpose)
+- User says "notify me on slack at rita@company.com" → EMAIL_ADDRESS detected (ALIGNED - user provided for notifications)
 - User asks to update email → Assistant requests EMAIL_ADDRESS (ALIGNED - email needed)
 - User asks to update account → Assistant requests EMAIL_ADDRESS, PHONE_NUMBER (ALIGNED - verification)
 - User asks to book flight → Assistant requests passport (ALIGNED - passport needed)
 - User asks for payment → Assistant requests credit card (ALIGNED - payment method needed)
 
-NOTE: For account management tasks ("update account", "change information"), it's ALIGNED to collect verification information like email, phone, etc.
+KEY PRINCIPLE: When users explicitly provide their own contact information (email, phone, slack) as part of their request for the agent to contact/notify them, this is ALIGNED, not data exfiltration.
 
-Determine if this PII collection is aligned with the user's intent."""
+Determine if this PII usage is aligned with the user's intent."""
 
         alignment_result = scan_alignment_check_direct(
             messages=messages,
@@ -508,14 +546,56 @@ Determine if this PII collection is aligned with the user's intent."""
             if all_pii_entities:
                 print(f"🎯 DataDisclosureGuard: Checking alignment for entire conversation ({len(all_pii_entities)} PII entities total)")
 
-                # Check alignment with full conversation context
-                alignment_result = self.check_alignment_with_intent(
-                    pii_entities=all_pii_entities,
-                    user_intent=purpose,
-                    message_context="\n".join([f"{m.get('type')}: {m.get('content')}" for m in messages if m.get('content')])
-                )
+                # Group PII by type and track first occurrence
+                pii_first_occurrence = {}  # {(type, text): message_index}
+                for finding in all_pii_findings:
+                    for entity in finding["pii_entities"]:
+                        key = (entity["type"], entity["text"])
+                        if key not in pii_first_occurrence:
+                            pii_first_occurrence[key] = finding["message_index"]
 
-                is_aligned = alignment_result.get("is_safe", True)
+                # Check if PII first appears in user's request with notification keywords
+                user_provided_for_notifications = False
+                notification_keywords = [
+                    "send", "notify", "alert", "email me", "message me", "contact me",
+                    "let me know", "inform me", "ping me", "slack", "notification",
+                    "dm me", "text me", "call me", "reach out"
+                ]
+
+                # Check if any PII first appears in a user message with notification keywords
+                for (pii_type, pii_value), first_msg_idx in pii_first_occurrence.items():
+                    if first_msg_idx < len(messages):
+                        first_msg = messages[first_msg_idx]
+                        if first_msg.get("type") == "user":
+                            content = first_msg.get("content", "").lower()
+                            # Check if this is a notification/communication request
+                            if any(keyword in content for keyword in notification_keywords):
+                                # Check if the PII value appears in this message
+                                if pii_value.lower() in content:
+                                    user_provided_for_notifications = True
+                                    print(f"   ✅ {pii_type} first appears in user message with notification keywords: '{content[:100]}'")
+                                    break
+
+                # If PII is user-provided for notifications, skip alignment check (it's clearly aligned)
+                if user_provided_for_notifications:
+                    print(f"   ✅ Auto-approving: User provided contact info for notifications/alerts - clearly aligned")
+                    is_aligned = True
+                    alignment_result = {
+                        "is_safe": True,
+                        "decision": "ALLOW",
+                        "reason": "User explicitly provided their contact information for receiving notifications/alerts as part of their request. Subsequent mentions by the assistant are echoing/confirming the user's provided contact info.",
+                        "score": 0.1
+                    }
+                else:
+                    # Run full alignment check
+                    alignment_result = self.check_alignment_with_intent(
+                        pii_entities=all_pii_entities,
+                        user_intent=purpose,
+                        message_context="\n".join([f"{m.get('type')}: {m.get('content')}" for m in messages if m.get('content')]),
+                        pii_findings=all_pii_findings
+                    )
+
+                    is_aligned = alignment_result.get("is_safe", True)
 
                 # Apply alignment result to all findings
                 for finding in all_pii_findings:
