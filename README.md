@@ -739,8 +739,12 @@ python test_alignment.py
 ```bash
 # Test false positive filtering
 python test_data_disclosure_fix.py
+# Expected: ✅ TEST PASSED: No false positives detected!
 
-# Expected output: ✅ TEST PASSED: No false positives detected!
+# Test AlignmentCheck scanner (requires TOGETHER_API_KEY)
+export TOGETHER_API_KEY=your_key_here
+python test_alignment_check.py
+# Expected: ✅ ALL TESTS PASSED (4/4 tests passed)
 ```
 
 **Quick test commands:**
@@ -756,16 +760,37 @@ python -c "import json; from multi_agent_demo.deviations.otel_parser import pars
 
 The project uses GitHub Actions to automatically run tests on commits to the `main` branch. Test failures are reported to a Slack channel for immediate notification.
 
-**Core Tests (Always Run):**
-- ✅ `test_data_disclosure_fix.py` - No API key required
-- ✅ `test_alignment_fix.py` - No API key required
-- ✅ `test_deviations.py` - No API key required
+**Tests Running in CI/CD:**
 
-**Optional Tests (Require API Keys):**
-- ⚠️ `test_alignment_check.py` - Requires `TOGETHER_API_KEY` in GitHub Secrets
-  - **To enable:** Add `TOGETHER_API_KEY` to repository secrets (Settings → Secrets → Actions)
-  - **Cost:** ~$0.18/1M tokens on Together AI
-  - **Usage:** Tests goal hijacking detection with live API calls
+**Core Tests (Always Run - No API Keys):**
+- ✅ `test_data_disclosure_fix.py` - DataDisclosureGuard false positive filtering
+- ✅ `test_alignment_fix.py` - DataDisclosureGuard PII alignment checking
+- ✅ `test_deviations.py` - Temporal deviation and bias detection
+
+**AlignmentCheck Test (API Key Configured ✅):**
+- ✅ `test_alignment_check.py` - AlignmentCheck goal hijacking detection
+  - **Status:** ENABLED (TOGETHER_API_KEY configured)
+  - **Cost:** ~$0.18/1M tokens per test run
+  - **Tests:** Goal hijacking, off-topic redirects, aligned conversations
+  - **Note:** To disable, remove `TOGETHER_API_KEY` from GitHub repository secrets
+
+**Test Summary:**
+- **Total tests:** 4/4 (3 core + 1 AlignmentCheck)
+- **API costs:** ~$0.01-0.02 per CI/CD run (AlignmentCheck only)
+- **Run time:** ~5-8 minutes total
+
+**What You'll See in GitHub Actions:**
+```
+✓ Run DataDisclosureGuard false positive test
+✓ Run DataDisclosureGuard alignment test
+✓ Run deviation/bias detection test
+✓ Run AlignmentCheck scanner test (optional)
+✓ Tests Passed: 4/4
+```
+
+**Slack Notification (if configured):**
+- Success: "✅ Tests Passed: 4/4 ✅"
+- Failure: "❌ Tests Failed: X/4" with details
 
 See `.github/workflows/test.yml` for CI configuration.
 
