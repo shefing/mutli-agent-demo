@@ -58,6 +58,48 @@ jobs:
         python test_deviations.py
         echo "status=$?" >> $GITHUB_OUTPUT
 
+    - name: Run AlignmentCheck dual dimensions test (optional)
+      id: test_alignment_dual_dimensions
+      continue-on-error: true
+      env:
+        TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      run: |
+        if [ -z "$TOGETHER_API_KEY" ]; then
+          echo "⏭️ Skipping AlignmentCheck dual dimensions test (TOGETHER_API_KEY not configured)"
+          echo "outcome=skipped" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        echo "Running AlignmentCheck dual dimensions test (Intended Use + User Request)..."
+        python test_alignment_dual_dimensions.py
+        TEST_RESULT=$?
+        if [ $TEST_RESULT -eq 0 ]; then
+          echo "outcome=success" >> $GITHUB_OUTPUT
+        else
+          echo "outcome=failure" >> $GITHUB_OUTPUT
+          exit $TEST_RESULT
+        fi
+
+    - name: Run AlignmentCheck vs FactChecker separation test (optional)
+      id: test_alignment_vs_factchecker
+      continue-on-error: true
+      env:
+        TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      run: |
+        if [ -z "$TOGETHER_API_KEY" ]; then
+          echo "⏭️ Skipping AlignmentCheck vs FactChecker test (TOGETHER_API_KEY not configured)"
+          echo "outcome=skipped" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        echo "Running AlignmentCheck vs FactChecker separation test..."
+        python test_alignment_vs_factchecker.py
+        TEST_RESULT=$?
+        if [ $TEST_RESULT -eq 0 ]; then
+          echo "outcome=success" >> $GITHUB_OUTPUT
+        else
+          echo "outcome=failure" >> $GITHUB_OUTPUT
+          exit $TEST_RESULT
+        fi
+
     - name: Run AlignmentCheck scanner test (optional)
       id: test_alignment_check
       continue-on-error: true
@@ -119,8 +161,34 @@ jobs:
           PASSED=$((PASSED + 1))
         fi
 
-        # Optional test (AlignmentCheck - requires API key)
-        # Check the custom outcome we set in the test step
+        # Optional tests (AlignmentCheck - requires API key)
+        # Test 1: AlignmentCheck dual dimensions
+        ALIGNMENT_DUAL_OUTCOME="${{ steps.test_alignment_dual_dimensions.outputs.outcome }}"
+        if [ "$ALIGNMENT_DUAL_OUTCOME" == "skipped" ]; then
+          SKIPPED=$((SKIPPED + 1))
+        elif [ "$ALIGNMENT_DUAL_OUTCOME" == "success" ]; then
+          PASSED=$((PASSED + 1))
+          TOTAL=$((TOTAL + 1))
+        elif [ "$ALIGNMENT_DUAL_OUTCOME" == "failure" ]; then
+          FAILED=$((FAILED + 1))
+          TOTAL=$((TOTAL + 1))
+          FAILED_TESTS="${FAILED_TESTS}• test_alignment_dual_dimensions.py\n"
+        fi
+
+        # Test 2: AlignmentCheck vs FactChecker separation
+        ALIGNMENT_VS_FACTCHECKER_OUTCOME="${{ steps.test_alignment_vs_factchecker.outputs.outcome }}"
+        if [ "$ALIGNMENT_VS_FACTCHECKER_OUTCOME" == "skipped" ]; then
+          SKIPPED=$((SKIPPED + 1))
+        elif [ "$ALIGNMENT_VS_FACTCHECKER_OUTCOME" == "success" ]; then
+          PASSED=$((PASSED + 1))
+          TOTAL=$((TOTAL + 1))
+        elif [ "$ALIGNMENT_VS_FACTCHECKER_OUTCOME" == "failure" ]; then
+          FAILED=$((FAILED + 1))
+          TOTAL=$((TOTAL + 1))
+          FAILED_TESTS="${FAILED_TESTS}• test_alignment_vs_factchecker.py\n"
+        fi
+
+        # Test 3: AlignmentCheck scanner test
         ALIGNMENT_OUTCOME="${{ steps.test_alignment_check.outputs.outcome }}"
         if [ "$ALIGNMENT_OUTCOME" == "skipped" ]; then
           SKIPPED=$((SKIPPED + 1))
@@ -214,7 +282,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Failed Tests:*\ntest_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\ntest_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\ntest_user_provided_notification_contact.py: ${{ steps.test_notification_contact.outcome }}\ntest_deviations.py: ${{ steps.test_deviations.outcome }}"
+                  "text": "*Core Tests:*\n• test_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\n• test_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\n• test_user_provided_notification_contact.py: ${{ steps.test_notification_contact.outcome }}\n• test_deviations.py: ${{ steps.test_deviations.outcome }}\n\n*Optional Tests (require TOGETHER_API_KEY):*\n• test_alignment_dual_dimensions.py: ${{ steps.test_alignment_dual_dimensions.outputs.outcome }}\n• test_alignment_vs_factchecker.py: ${{ steps.test_alignment_vs_factchecker.outputs.outcome }}\n• test_alignment_check.py: ${{ steps.test_alignment_check.outputs.outcome }}"
                 }
               },
               {
