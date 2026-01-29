@@ -650,9 +650,38 @@ Determine if this PII usage is aligned with the user's intent."""
                 score = 0.0  # No risk
                 reason = "No PII detected in conversation."
 
+            # Build per-message results for normalized format
+            message_results = []
+            for finding in all_pii_findings:
+                msg_decision = "BLOCK" if not finding.get("is_aligned", True) else "SAFE"
+                message_results.append({
+                    "message_index": finding["message_index"],
+                    "message_type": finding["message_type"],
+                    "decision": msg_decision,
+                    "reason": f"PII detected: {', '.join([e['type'] for e in finding['pii_entities']])}"
+                })
+
+            # Calculate counts (across all messages, not just those with PII)
+            total_messages = len(messages)
+            counts = {
+                "block": sum(1 for r in message_results if r["decision"] == "BLOCK"),
+                "warning": sum(1 for r in message_results if r["decision"] == "WARNING"),
+                "safe": total_messages - sum(1 for r in message_results if r["decision"] in ["BLOCK", "WARNING"]),
+                "total": total_messages
+            }
+
+            # Map decision to normalized format
+            overall_decision = "BLOCK" if decision == "HUMAN_IN_THE_LOOP" else "SAFE"
+            if decision == "ALLOW" and all_pii_findings:
+                # PII found but aligned
+                overall_decision = "WARNING"  # Informational warning
+
             return {
                 "scanner": "DataDisclosureGuard",
                 "decision": decision,
+                "overall_decision": overall_decision,  # Normalized: SAFE/WARNING/BLOCK
+                "counts": counts,  # Normalized counts
+                "message_results": message_results,  # Per-message results
                 "score": score,
                 "reason": reason,
                 "is_safe": is_safe,

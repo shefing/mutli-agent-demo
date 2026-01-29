@@ -27,6 +27,10 @@ from multi_agent_demo.direct_scanner_wrapper import (
     scan_alignment_check_direct,
     scan_prompt_guard_direct
 )
+from multi_agent_demo.alignment_check_new import (
+    scan_alignment_check_per_message,
+    scan_prompt_guard_per_message
+)
 
 
 def initialize_firewall():
@@ -227,7 +231,7 @@ def run_scanner_tests():
 
     # Test enabled scanners
     alignment_result = None
-    promptguard_results = []
+    promptguard_result = None
     nemo_results = {}
 
     # Test AlignmentCheck if enabled (with fallback to direct API if firewall fails)
@@ -235,28 +239,23 @@ def run_scanner_tests():
     print(f"🔍 Firewall object: {firewall is not None}")
     if enabled_scanners.get("AlignmentCheck", False):
         print("✅ Running AlignmentCheck scanner...")
-        # ALWAYS use direct API for AlignmentCheck to get our enhanced quantitative detection
-        # The firewall's native scan_replay doesn't have our custom prompts
-        print("ℹ️ Using direct AlignmentCheck API (with enhanced quantitative detection)")
-        alignment_result = scan_alignment_check_direct(
+        # Use per-message validation for normalized results
+        print("ℹ️ Using per-message AlignmentCheck validation")
+        alignment_result = scan_alignment_check_per_message(
             st.session_state.current_conversation["messages"],
             st.session_state.current_conversation["purpose"]
         )
     else:
         print("⚠️ AlignmentCheck is DISABLED - skipping")
 
-    # Test PromptGuard if enabled (with fallback to direct API if firewall fails)
+    # Test PromptGuard if enabled - use per-message validation
+    promptguard_result = None
     if enabled_scanners.get("PromptGuard", False):
-        for msg in st.session_state.current_conversation["messages"]:
-            if msg["type"] == "user":
-                if firewall is not None:
-                    result = test_prompt_guard(firewall, msg["content"])
-                else:
-                    # No firewall, use direct API
-                    print("ℹ️ Using direct PromptGuard API (no firewall)")
-                    result = scan_prompt_guard_direct(msg["content"])
-                result["message"] = msg["content"][:50] + "..."
-                promptguard_results.append(result)
+        print("✅ Running PromptGuard scanner...")
+        print("ℹ️ Using per-message PromptGuard validation")
+        promptguard_result = scan_prompt_guard_per_message(
+            st.session_state.current_conversation["messages"]
+        )
 
     # Test NeMo GuardRails and custom scanners if enabled (don't require firewall)
     messages = st.session_state.current_conversation["messages"]
@@ -276,7 +275,7 @@ def run_scanner_tests():
         "timestamp": datetime.now().isoformat(),
         "purpose": st.session_state.current_conversation["purpose"],
         "alignment_check": alignment_result,
-        "prompt_guard": promptguard_results,
+        "prompt_guard": promptguard_result,
         "nemo_results": nemo_results,
         "conversation_length": len(st.session_state.current_conversation["messages"])
     }

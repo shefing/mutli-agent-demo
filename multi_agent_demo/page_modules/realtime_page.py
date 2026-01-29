@@ -4,7 +4,7 @@ Original functionality for testing agent conversations with security scanners
 """
 
 import streamlit as st
-from multi_agent_demo.ui import render_sidebar, render_conversation_builder, render_test_results
+from multi_agent_demo.ui import render_sidebar, render_conversation_builder, render_test_results_new
 from multi_agent_demo.ui.common import render_page_header
 
 
@@ -28,4 +28,4 @@ def render():
 
     with col2:
         # Render test results (right panel)
-        render_test_results()
+        render_test_results_new()

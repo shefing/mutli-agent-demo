@@ -70,8 +70,10 @@ def test_h_and_m_scenario():
     print("\nSCAN RESULTS:")
     print("=" * 80)
     print(f"Decision:       {result.get('decision')}")
+    print(f"Overall Decision: {result.get('overall_decision', 'N/A')}")
+    if 'counts' in result:
+        print(f"Counts:         Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
     print(f"Is Safe:        {result.get('is_safe')}")
-    print(f"Score:          {result.get('score')}")
     print(f"PII Count:      {result.get('total_pii_count')}")
     print(f"Reason:         {result.get('reason', 'N/A')}")
     print("=" * 80)

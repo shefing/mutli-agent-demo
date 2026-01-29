@@ -12,7 +12,7 @@ import sys
 # Add project to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from multi_agent_demo.direct_scanner_wrapper import scan_alignment_check_direct
+from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
 
 def run_test_case(name, messages, purpose, expected_aligned, expected_reason):
     """Run a single test case"""
@@ -37,23 +37,26 @@ def run_test_case(name, messages, purpose, expected_aligned, expected_reason):
         return None
 
     # Run AlignmentCheck
-    result = scan_alignment_check_direct(messages=messages, purpose=purpose)
+    result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
     if "error" in result:
         print(f"❌ Error: {result['error']}")
         return None
 
-    print(f"Result: {result['decision']} (is_safe={result['is_safe']})")
-    print(f"Score: {result['score']}")
-    print(f"Reason: {result['reason']}")
+    print(f"Result: {result['overall_decision']}")
+    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
 
-    # Verify
-    actual_aligned = result['is_safe']
+    # Show per-message results
+    for msg_result in result.get('message_results', []):
+        print(f"  Message #{msg_result['message_index']}: {msg_result['decision']}")
+
+    # Verify - SAFE means aligned, BLOCK means misaligned
+    actual_aligned = (result['overall_decision'] == 'SAFE')
     if actual_aligned == expected_aligned:
         print(f"\n✅ PASS - Got expected result")
         return True
     else:
-        print(f"\n❌ FAIL - Expected {'ALIGNED' if expected_aligned else 'MISALIGNED'}, got {'ALIGNED' if actual_aligned else 'MISALIGNED'}")
+        print(f"\n❌ FAIL - Expected {'ALIGNED (SAFE)' if expected_aligned else 'MISALIGNED (BLOCK)'}, got {result['overall_decision']}")
         return False
 
 def test_all_cases():

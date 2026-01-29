@@ -19,20 +19,43 @@ def _render_result_summary(result: dict):
 
     # Check AlignmentCheck
     if result["alignment_check"] and "error" not in result["alignment_check"]:
-        if not result["alignment_check"]["is_safe"]:
-            blocked_count += 1
-        else:
-            safe_count += 1
+        ac = result["alignment_check"]
+        # Support both old and new formats
+        if "overall_decision" in ac:
+            # New count-based format
+            if ac["overall_decision"] == "BLOCK":
+                blocked_count += 1
+            elif ac["overall_decision"] == "WARNING":
+                warning_count += 1
+            else:
+                safe_count += 1
+        elif "is_safe" in ac:
+            # Old format
+            if not ac["is_safe"]:
+                blocked_count += 1
+            else:
+                safe_count += 1
     elif result["alignment_check"] and "error" in result["alignment_check"]:
         blocked_count += 1  # Errors are treated as blocked
 
     # Check PromptGuard
     for pg in result.get("prompt_guard", []):
         if "error" not in pg:
-            if not pg["is_safe"]:
-                blocked_count += 1
-            else:
-                safe_count += 1
+            # Support both old and new formats
+            if "decision" in pg:
+                # New format
+                if pg["decision"] == "BLOCK":
+                    blocked_count += 1
+                elif pg["decision"] == "WARNING":
+                    warning_count += 1
+                else:
+                    safe_count += 1
+            elif "is_safe" in pg:
+                # Old format
+                if not pg["is_safe"]:
+                    blocked_count += 1
+                else:
+                    safe_count += 1
         else:
             blocked_count += 1  # Errors are treated as blocked
 
@@ -59,8 +82,14 @@ def _render_result_summary(result: dict):
                     blocked_count += 1
                 elif decision == "WARNING":
                     warning_count += 1
-                elif scanner_result["is_safe"]:
+                elif decision in ["SAFE", "ALLOW"]:
                     safe_count += 1
+                elif "is_safe" in scanner_result:
+                    # Fallback to old format
+                    if scanner_result["is_safe"]:
+                        safe_count += 1
+                    else:
+                        blocked_count += 1
                 else:
                     blocked_count += 1
         else:
@@ -118,43 +147,67 @@ def _render_alignment_check_results(result: dict):
     if ac_result is None:
         st.info("🔒 AlignmentCheck scanner was disabled for this test")
     elif "error" not in ac_result:
-        # Decision indicator
-        if ac_result["is_safe"]:
-            st.success(f"✅ {ac_result['decision']}")
+        # Support both old and new formats
+        if "overall_decision" in ac_result:
+            # New count-based format
+            decision = ac_result["overall_decision"]
+            if decision == "SAFE":
+                st.success(f"✅ {decision}")
+            elif decision == "WARNING":
+                st.warning(f"⚠️ {decision}")
+            else:
+                st.error(f"🚫 {decision}")
+
+            # Show counts if available
+            if "counts" in ac_result:
+                counts = ac_result["counts"]
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Messages", counts["total"])
+                with col2:
+                    st.metric("✅ Safe", counts["safe"])
+                with col3:
+                    st.metric("⚠️ Warning", counts.get("warning", 0))
+                with col4:
+                    st.metric("🚫 Blocked", counts["block"])
         else:
-            st.error(f"🚫 {ac_result['decision']}")
+            # Old format with score
+            if ac_result.get("is_safe"):
+                st.success(f"✅ {ac_result.get('decision', 'SAFE')}")
+            else:
+                st.error(f"🚫 {ac_result.get('decision', 'BLOCK')}")
 
-        # Risk gauge - FULL gauge = DANGER, EMPTY gauge = SAFE
-        # Always red, fill level indicates risk
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=ac_result["score"],
-            number={"font": {"size": 24}, "suffix": " Risk"},
-            domain={"x": [0, 1], "y": [0, 1]},
-            title={"text": "Risk Level", "font": {"size": 16}},
-            gauge={
-                "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkred"},
-                "bar": {"color": "red", "thickness": 0.8},  # Always red
-                "bgcolor": "lightgray",
-                "borderwidth": 2,
-                "bordercolor": "darkred",
-                "steps": [
-                    {"range": [0, 0.3], "color": "rgba(144, 238, 144, 0.3)"},  # Light green zone (safe)
-                    {"range": [0.3, 0.7], "color": "rgba(255, 255, 0, 0.3)"},  # Light yellow zone (warning)
-                    {"range": [0.7, 1], "color": "rgba(255, 0, 0, 0.2)"}       # Light red zone (danger)
-                ]
-            }
-        ))
-        fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
-        st.plotly_chart(fig_gauge, use_container_width=True, key="alignment_check_gauge")
+            # Risk gauge - only for old format
+            if "score" in ac_result:
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=ac_result["score"],
+                    number={"font": {"size": 24}, "suffix": " Risk"},
+                    domain={"x": [0, 1], "y": [0, 1]},
+                    title={"text": "Risk Level", "font": {"size": 16}},
+                    gauge={
+                        "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkred"},
+                        "bar": {"color": "red", "thickness": 0.8},  # Always red
+                        "bgcolor": "lightgray",
+                        "borderwidth": 2,
+                        "bordercolor": "darkred",
+                        "steps": [
+                            {"range": [0, 0.3], "color": "rgba(144, 238, 144, 0.3)"},  # Light green zone (safe)
+                            {"range": [0.3, 0.7], "color": "rgba(255, 255, 0, 0.3)"},  # Light yellow zone (warning)
+                            {"range": [0.7, 1], "color": "rgba(255, 0, 0, 0.2)"}       # Light red zone (danger)
+                        ]
+                    }
+                ))
+                fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
+                st.plotly_chart(fig_gauge, use_container_width=True, key="alignment_check_gauge")
 
-        # Explain what the score means
-        st.caption("📊 **Risk Score:** 0.0-0.3 = Safe (green) | 0.3-0.7 = Warning (yellow) | 0.7-1.0 = Danger (red)")
-        st.caption(f"🔍 **This score ({ac_result['score']:.1f}):** {'Low risk - agent behavior is aligned' if ac_result['score'] < 0.3 else 'Medium risk - potential concerns detected' if ac_result['score'] < 0.7 else 'High risk - significant misalignment detected'}")
+                # Explain what the score means
+                st.caption("📊 **Risk Score:** 0.0-0.3 = Safe (green) | 0.3-0.7 = Warning (yellow) | 0.7-1.0 = Danger (red)")
+                st.caption(f"🔍 **This score ({ac_result['score']:.1f}):** {'Low risk - agent behavior is aligned' if ac_result['score'] < 0.3 else 'Medium risk - potential concerns detected' if ac_result['score'] < 0.7 else 'High risk - significant misalignment detected'}")
 
         # Determine analysis type and display compactly
-        reason = ac_result['reason']
-        reason_lower = reason.lower()
+        reason = ac_result.get('reason', 'No detailed reason provided')
+        reason_lower = reason.lower() if reason else ''
 
         # Check for quantitative misalignment
         if any(word in reason_lower for word in ['numeric', 'quantity', 'discrepancy', 'orders', 'items', 'requested']):
@@ -192,10 +245,20 @@ def _render_prompt_guard_results(result: dict):
         for idx, pg_result in enumerate(result["prompt_guard"], 1):
             if "error" in pg_result:
                 error_messages.append(idx)
-            elif not pg_result["is_safe"]:
-                blocked_messages.append(idx)
             else:
-                safe_messages.append(idx)
+                # Support both old and new formats
+                if "decision" in pg_result:
+                    # New format
+                    if pg_result["decision"] in ["BLOCK"]:
+                        blocked_messages.append(idx)
+                    else:
+                        safe_messages.append(idx)
+                elif "is_safe" in pg_result:
+                    # Old format
+                    if not pg_result["is_safe"]:
+                        blocked_messages.append(idx)
+                    else:
+                        safe_messages.append(idx)
 
         # Show overall decision
         if error_messages:
@@ -257,53 +320,69 @@ def _render_nemo_results(result: dict):
             st.subheader(f"{scanner_name} Scanner")
             if "error" not in scanner_result:
                 # Decision indicator with severity levels
-                decision = scanner_result['decision']
+                decision = scanner_result.get('decision', scanner_result.get('overall_decision', 'UNKNOWN'))
                 if decision == "BLOCK":
                     st.error(f"🚫 {decision}")
                 elif decision == "WARNING":
                     st.warning(f"⚠️ {decision}")
-                elif scanner_result["is_safe"]:
+                elif decision in ["SAFE", "ALLOW"]:
+                    st.success(f"✅ {decision}")
+                elif "is_safe" in scanner_result and scanner_result["is_safe"]:
                     st.success(f"✅ {decision}")
                 else:
                     st.error(f"🚫 {decision}")
 
-                # Risk gauge - FULL gauge = DANGER, EMPTY gauge = SAFE
-                # Always red, fill level indicates risk
-                fig_gauge = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=scanner_result["score"],
-                    number={"font": {"size": 24}, "suffix": " Risk"},
-                    domain={"x": [0, 1], "y": [0, 1]},
-                    title={"text": "Risk Level", "font": {"size": 16}},
-                    gauge={
-                        "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkred"},
-                        "bar": {"color": "red", "thickness": 0.8},  # Always red
-                        "bgcolor": "lightgray",
-                        "borderwidth": 2,
-                        "bordercolor": "darkred",
-                        "steps": [
-                            {"range": [0, 0.3], "color": "rgba(144, 238, 144, 0.3)"},  # Light green zone (safe)
-                            {"range": [0.3, 0.7], "color": "rgba(255, 255, 0, 0.3)"},  # Light yellow zone (warning)
-                            {"range": [0.7, 1], "color": "rgba(255, 0, 0, 0.2)"}       # Light red zone (danger)
-                        ]
-                    }
-                ))
-                fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
-                st.plotly_chart(fig_gauge, use_container_width=True, key=f"{scanner_name.lower()}_gauge")
+                # Show counts if available (new format)
+                if "counts" in scanner_result:
+                    counts = scanner_result["counts"]
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Messages", counts["total"])
+                    with col2:
+                        st.metric("✅ Safe", counts["safe"])
+                    with col3:
+                        st.metric("⚠️ Warning", counts.get("warning", 0))
+                    with col4:
+                        st.metric("🚫 Blocked", counts["block"])
 
-                # Explain what the score means
-                st.caption("📊 **Risk Score:** 0.0-0.3 = Safe (green) | 0.3-0.7 = Warning (yellow) | 0.7-1.0 = Danger (red)")
-                score_explanation = ""
-                if scanner_result['score'] < 0.3:
-                    score_explanation = "Low risk - content appears safe"
-                elif scanner_result['score'] < 0.7:
-                    score_explanation = "Medium risk - potential issues detected"
-                else:
-                    score_explanation = "High risk - significant concerns detected"
-                st.caption(f"🔍 **This score ({scanner_result['score']:.1f}):** {score_explanation}")
+                # Risk gauge - only for old format with score
+                if "score" in scanner_result:
+                    fig_gauge = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=scanner_result["score"],
+                        number={"font": {"size": 24}, "suffix": " Risk"},
+                        domain={"x": [0, 1], "y": [0, 1]},
+                        title={"text": "Risk Level", "font": {"size": 16}},
+                        gauge={
+                            "axis": {"range": [0, 1], "tickwidth": 2, "tickcolor": "darkred"},
+                            "bar": {"color": "red", "thickness": 0.8},  # Always red
+                            "bgcolor": "lightgray",
+                            "borderwidth": 2,
+                            "bordercolor": "darkred",
+                            "steps": [
+                                {"range": [0, 0.3], "color": "rgba(144, 238, 144, 0.3)"},  # Light green zone (safe)
+                                {"range": [0.3, 0.7], "color": "rgba(255, 255, 0, 0.3)"},  # Light yellow zone (warning)
+                                {"range": [0.7, 1], "color": "rgba(255, 0, 0, 0.2)"}       # Light red zone (danger)
+                            ]
+                        }
+                    ))
+                    fig_gauge.update_layout(height=188, showlegend=False, margin={"l": 20, "r": 20, "t": 20, "b": 20})
+                    st.plotly_chart(fig_gauge, use_container_width=True, key=f"{scanner_name.lower()}_gauge")
+
+                    # Explain what the score means
+                    st.caption("📊 **Risk Score:** 0.0-0.3 = Safe (green) | 0.3-0.7 = Warning (yellow) | 0.7-1.0 = Danger (red)")
+                    score_explanation = ""
+                    if scanner_result['score'] < 0.3:
+                        score_explanation = "Low risk - content appears safe"
+                    elif scanner_result['score'] < 0.7:
+                        score_explanation = "Medium risk - potential issues detected"
+                    else:
+                        score_explanation = "High risk - significant concerns detected"
+                    st.caption(f"🔍 **This score ({scanner_result['score']:.1f}):** {score_explanation}")
 
                 # Show analysis with expandable full response
-                st.info(f"**Analysis:** {scanner_result['reason']}")
+                if "reason" in scanner_result:
+                    st.info(f"**Analysis:** {scanner_result['reason']}")
 
                 # Special handling for FactsChecker comprehensive checks
                 if scanner_name == "FactsChecker" and "checks_performed" in scanner_result:
@@ -423,19 +502,36 @@ def _render_history_chart():
         history_data = []
         for i, result in enumerate(st.session_state.test_results):
             if result["alignment_check"] and "error" not in result["alignment_check"]:
-                history_data.append({
-                    "Test": i + 1,
-                    "Score": result["alignment_check"]["score"],
-                    "Decision": result["alignment_check"]["decision"],
-                    "Safe": result["alignment_check"]["is_safe"]
-                })
+                ac = result["alignment_check"]
+                # Support both old and new formats
+                if "score" in ac:
+                    # Old format with scores
+                    history_data.append({
+                        "Test": i + 1,
+                        "Score": ac["score"],
+                        "Decision": ac.get("decision", "UNKNOWN"),
+                        "Safe": ac.get("is_safe", True)
+                    })
+                elif "overall_decision" in ac:
+                    # New format - use counts to approximate a score
+                    counts = ac.get("counts", {})
+                    total = counts.get("total", 1)
+                    blocked = counts.get("block", 0)
+                    # Approximate score: 0 = all safe, 1 = all blocked
+                    approx_score = blocked / total if total > 0 else 0
+                    history_data.append({
+                        "Test": i + 1,
+                        "Score": approx_score,
+                        "Decision": ac["overall_decision"],
+                        "Safe": ac["overall_decision"] == "SAFE"
+                    })
 
         if history_data:
             df = pd.DataFrame(history_data)
             fig_line = px.line(df, x="Test", y="Score",
                               color="Safe",
                               markers=True,
-                              title="Alignment Scores Over Tests")
+                              title="Test Results Over Time (Score = Blocked Messages / Total)")
             fig_line.add_hline(y=0.5, line_dash="dash", line_color="red",
                               annotation_text="Threshold")
             st.plotly_chart(fig_line, use_container_width=True)

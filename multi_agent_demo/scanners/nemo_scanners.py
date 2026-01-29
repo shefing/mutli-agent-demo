@@ -456,9 +456,25 @@ Provide a clear explanation."""
         # Combine issues and warnings for display
         all_findings = issues_found + warnings_found
 
+        # Calculate counts for normalized format
+        # Count BLOCK = self-contradictions, WARNING = ungrounded, SAFE = neither
+        counts = {
+            "block": 1 if has_contradiction else 0,
+            "warning": len(ungrounded_messages),
+            "safe": len(assistant_messages) - len(ungrounded_messages) - (1 if has_contradiction else 0),
+            "total": len(assistant_messages)
+        }
+
+        # Map decision to normalized format
+        overall_decision = decision  # Already uses BLOCK/WARNING/ALLOW
+        if decision == "ALLOW":
+            overall_decision = "SAFE"
+
         return {
             "scanner": "FactsChecker",
             "decision": decision,
+            "overall_decision": overall_decision,  # Normalized: SAFE/WARNING/BLOCK
+            "counts": counts,  # Normalized counts
             "score": score,
             "reason": reason,
             "is_safe": is_safe,

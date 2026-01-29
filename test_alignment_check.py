@@ -5,7 +5,7 @@ Tests the AlignmentCheck scanner with various scenarios without requiring user i
 """
 
 import sys
-from multi_agent_demo.direct_scanner_wrapper import scan_alignment_check_direct
+from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
 
 
 def test_aligned_conversation():
@@ -26,18 +26,17 @@ def test_aligned_conversation():
     print(f"\nPurpose: {purpose}")
     print(f"Messages: {len(messages)}")
 
-    result = scan_alignment_check_direct(messages=messages, purpose=purpose)
+    result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
-    print(f"\nResult: {result.get('decision')}")
-    print(f"Is Safe: {result.get('is_safe')}")
-    print(f"Score: {result.get('score')}")
+    print(f"\nOverall Decision: {result.get('overall_decision')}")
+    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
 
     # Verify expected result
-    if result.get('is_safe') == True:
-        print("✅ PASS: Aligned conversation correctly identified as safe")
+    if result.get('overall_decision') == 'SAFE':
+        print("✅ PASS: Aligned conversation correctly identified as SAFE")
         return True
     else:
-        print(f"❌ FAIL: Expected aligned conversation to be safe, got is_safe={result.get('is_safe')}")
+        print(f"❌ FAIL: Expected SAFE, got {result.get('overall_decision')}")
         return False
 
 
@@ -59,18 +58,17 @@ def test_goal_hijacking():
     print(f"\nPurpose: {purpose}")
     print(f"Messages: {len(messages)}")
 
-    result = scan_alignment_check_direct(messages=messages, purpose=purpose)
+    result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
-    print(f"\nResult: {result.get('decision')}")
-    print(f"Is Safe: {result.get('is_safe')}")
-    print(f"Score: {result.get('score')}")
+    print(f"\nOverall Decision: {result.get('overall_decision')}")
+    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
 
     # Verify expected result
-    if result.get('is_safe') == False or result.get('score', 0) > 0.5:
+    if result.get('overall_decision') != 'SAFE':
         print("✅ PASS: Goal hijacking correctly detected")
         return True
     else:
-        print(f"❌ FAIL: Expected goal hijacking to be detected, got is_safe={result.get('is_safe')}, score={result.get('score')}")
+        print(f"❌ FAIL: Expected goal hijacking to be detected, got {result.get('overall_decision')}")
         return False
 
 
@@ -92,18 +90,17 @@ def test_off_topic_redirect():
     print(f"\nPurpose: {purpose}")
     print(f"Messages: {len(messages)}")
 
-    result = scan_alignment_check_direct(messages=messages, purpose=purpose)
+    result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
-    print(f"\nResult: {result.get('decision')}")
-    print(f"Is Safe: {result.get('is_safe')}")
-    print(f"Score: {result.get('score')}")
+    print(f"\nOverall Decision: {result.get('overall_decision')}")
+    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
 
     # Verify expected result
-    if result.get('is_safe') == False or result.get('score', 0) > 0.5:
+    if result.get('overall_decision') != 'SAFE':
         print("✅ PASS: Off-topic redirect correctly detected")
         return True
     else:
-        print(f"❌ FAIL: Expected off-topic redirect to be detected, got is_safe={result.get('is_safe')}, score={result.get('score')}")
+        print(f"❌ FAIL: Expected off-topic redirect to be detected, got {result.get('overall_decision')}")
         return False
 
 
@@ -119,12 +116,12 @@ def test_error_handling():
     print(f"\nPurpose: {purpose}")
     print(f"Messages: {len(messages)}")
 
-    result = scan_alignment_check_direct(messages=messages, purpose=purpose)
+    result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
     print(f"\nResult: {result}")
 
     # Should handle gracefully (either error or safe default)
-    if "error" in result or result.get('is_safe') == True:
+    if "error" in result or result.get('overall_decision') == 'SAFE':
         print("✅ PASS: Empty messages handled gracefully")
         return True
     else:

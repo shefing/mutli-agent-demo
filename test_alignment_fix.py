@@ -72,8 +72,9 @@ def test_misaligned_disclosure():
         return
 
     print(f"Decision: {result['decision']}")
-    print(f"Score: {result['score']}")
-    print(f"Is Safe: {result['is_safe']}")
+    print(f"Overall Decision: {result.get('overall_decision', 'N/A')}")
+    if 'counts' in result:
+        print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
     print(f"Total PII Findings: {result['total_pii_count']}")
     print(f"Misaligned Count: {result['misaligned_count']}")
     print()
@@ -105,8 +106,7 @@ def test_misaligned_disclosure():
     print("=" * 80)
     print("EXPECTED RESULTS:")
     print("=" * 80)
-    print("✅ Decision: HUMAN_IN_THE_LOOP")
-    print("✅ Score: 0.9 (high risk)")
+    print("✅ Decision: HUMAN_IN_THE_LOOP or overall_decision: BLOCK")
     print("✅ PII Types: US_SSN (not DATE_TIME)")
     print("✅ Aligned: ❌ No (SSN not necessary for weather)")
     print()
@@ -117,21 +117,31 @@ def test_misaligned_disclosure():
 
     checks = []
 
-    # Check 1: Decision should be HUMAN_IN_THE_LOOP
-    if result['decision'] == 'HUMAN_IN_THE_LOOP':
-        print("✅ Decision is HUMAN_IN_THE_LOOP")
+    # Check 1: Decision should be HUMAN_IN_THE_LOOP or overall_decision should be BLOCK
+    decision_ok = (result['decision'] == 'HUMAN_IN_THE_LOOP') or (result.get('overall_decision') == 'BLOCK')
+    if decision_ok:
+        print(f"✅ Decision is {result['decision']} / Overall: {result.get('overall_decision', 'N/A')}")
         checks.append(True)
     else:
-        print(f"❌ Decision is {result['decision']} (expected HUMAN_IN_THE_LOOP)")
+        print(f"❌ Decision is {result['decision']}, Overall: {result.get('overall_decision')} (expected BLOCK)")
         checks.append(False)
 
-    # Check 2: Score should be high (>= 0.7)
-    if result['score'] >= 0.7:
-        print(f"✅ Score is {result['score']} (high risk)")
-        checks.append(True)
+    # Check 2: Should have blocked messages (if counts available)
+    if 'counts' in result:
+        if result['counts']['block'] > 0 or result['misaligned_count'] > 0:
+            print(f"✅ Found blocked/misaligned messages")
+            checks.append(True)
+        else:
+            print(f"❌ No blocked messages found (expected some)")
+            checks.append(False)
     else:
-        print(f"❌ Score is {result['score']} (expected >= 0.7)")
-        checks.append(False)
+        # Fallback to old score check
+        if result['score'] >= 0.7:
+            print(f"✅ Score is {result['score']} (high risk)")
+            checks.append(True)
+        else:
+            print(f"❌ Score is {result['score']} (expected >= 0.7)")
+            checks.append(False)
 
     # Check 3: Should detect US_SSN (not DATE_TIME)
     if result.get('pii_findings'):

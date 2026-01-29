@@ -88,14 +88,16 @@ This project includes comprehensive documentation organized by topic:
 ## Features
 
 ### Real-Time Testing Page
-- **Multi-Scanner Testing**: Test 3 core security scanners simultaneously
-  - **PromptGuard**: Pre-execution input validation to detect malicious prompts and prompt injections
-  - **AlignmentCheck**: Runtime behavioral monitoring using Llama-3.1-8B for goal hijacking detection
-  - **FactChecker**: AI-powered fact verification using NeMo GuardRails + GPT-4o-mini
+- **Multi-Scanner Testing**: Test 3 core security scanners with per-message validation
+  - **PromptGuard**: Validates every user message for malicious prompts and injections (SAFE/WARNING/BLOCK)
+  - **AlignmentCheck**: Validates every assistant message for goal hijacking and behavioral drift (SAFE/BLOCK)
+  - **FactChecker**: Validates every assistant message for factual accuracy using GPT-4o-mini (SAFE/WARNING/BLOCK)
+- **Count-Based Results**: Each scanner returns counts of safe, warning, and block decisions per message
+- **Overall Decision**: Aggregated decision across all scanners (BLOCK > WARNING > SAFE)
 - **Conversation Builder**: Create custom agent conversations with user messages, assistant responses, and actions
 - **Predefined Scenarios**: Load example attack scenarios (Goal Hijacking, Data Exfiltration, Prompt Injection, etc.)
-- **Visual Feedback**: Real-time score visualization with gauges, metrics, and decision indicators
-- **Test History**: Track scanner performance over multiple tests with trend visualization
+- **Visual Feedback**: Clear decision indicators with per-message counts and expandable details
+- **Test History**: Track scanner performance over multiple tests
 - **Save/Load**: Persist custom scenarios for reuse
 
 ### Deviations Analysis Page
@@ -145,26 +147,32 @@ multi_agent_demo/
 ### Security Scanners (3 Core + 1 Optional)
 
 1. **PromptGuard Scanner** (LlamaFirewall)
-   - Pre-execution input validation
-   - Detects malicious prompts and prompt injections
-   - Uses HuggingFace models via LlamaFirewall
-   - Fallback: Heuristic pattern matching (31 suspicious patterns)
+   - **Validates**: Every user message
+   - **Detects**: Malicious prompts and prompt injections
+   - **Decisions**: BLOCK (clear injection), WARNING (suspicious patterns), SAFE (clean input)
+   - **Model**: HuggingFace models via LlamaFirewall
+   - **Fallback**: Heuristic pattern matching (31 suspicious patterns)
 
 2. **AlignmentCheck Scanner** (LlamaFirewall + Together AI)
-   - Runtime behavioral monitoring
-   - Detects goal hijacking and behavioral drift
-   - Model: `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo`
-   - Fallback: Direct Together API when LlamaFirewall fails
+   - **Validates**: Every assistant message
+   - **Detects**: Goal hijacking, off-topic redirects, behavioral drift
+   - **Decisions**: BLOCK (misaligned), SAFE (aligned with both intended use AND user request)
+   - **Model**: `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo`
+   - **Validation Dimensions**: (A) Stays within stated purpose/role, (B) Addresses user's actual request
+   - **Fallback**: Direct Together API when LlamaFirewall fails
 
 3. **FactChecker Scanner** (NeMo GuardRails + OpenAI)
-   - AI-powered fact verification
-   - Detects fabricated statistics and false claims
-   - Model: `gpt-4o-mini`
-   - Uses NeMo GuardRails framework for structured checking
+   - **Validates**: Every assistant message
+   - **Detects**: Self-contradictions, ungrounded claims, fabricated details
+   - **Decisions**: BLOCK (contradictions), WARNING (ungrounded claims), SAFE (factually sound)
+   - **Model**: `gpt-4o-mini`
+   - **Uses**: NeMo GuardRails framework for structured fact-checking
 
 4. **DataDisclosureGuard Scanner** (Presidio) - *Optional*
-   - PII detection using Microsoft Presidio
-   - Pattern-based recognizers for SSN, credit cards, financial data
+   - **Validates**: Every message (user + assistant)
+   - **Detects**: PII disclosure (with alignment checking)
+   - **Decisions**: BLOCK (misaligned PII), WARNING (aligned PII), SAFE (no PII)
+   - **Uses**: Microsoft Presidio for PII detection + alignment verification
 
 ---
 
@@ -420,17 +428,11 @@ For comprehensive usage documentation, see **[DEVIATIONS_FEATURE.md](./DEVIATION
   - Convert conversation format to LlamaFirewall trace format
   - Handles USER, ASSISTANT, and ACTION messages
 
-- `test_prompt_guard(firewall: LlamaFirewall, user_messages: list) -> dict`
-  - Test PromptGuard scanner with fallback
-  - Returns decisions, scores, and violations
-
-- `test_alignment_check(firewall: LlamaFirewall, trace: Trace) -> dict`
-  - Test AlignmentCheck scanner
-  - Returns alignment scores and decisions
-
 - `run_scanner_tests(conversation: list, agent_config: dict, enabled_scanners: list) -> dict`
-  - Orchestrate all enabled scanner tests
-  - Returns comprehensive test results
+  - Orchestrate all enabled scanner tests with per-message validation
+  - Uses `scan_alignment_check_per_message()` and `scan_prompt_guard_per_message()`
+  - Returns counts (safe/warning/block) and overall_decision for each scanner
+  - Returns comprehensive test results with per-message decisions
 
 #### `multi_agent_demo/direct_scanner_wrapper.py`
 **Purpose**: Direct API wrappers bypassing LlamaFirewall
@@ -582,8 +584,12 @@ For comprehensive usage documentation, see **[DEVIATIONS_FEATURE.md](./DEVIATION
 **Purpose**: Scanner test results visualization
 
 **Key Functions:**
-- `render_test_results(results: dict)`: Display AlignmentCheck gauge, PromptGuard alerts
-- `render_nemo_results(nemo_results: dict)`: Display fact-checking findings
+- `render_overall_decision(result: dict)`: Display aggregated decision badge (SAFE/WARNING/BLOCK)
+- `render_scanner_results(results: dict)`: Display per-scanner counts and per-message decisions
+- `render_alignment_results(result: dict)`: Display AlignmentCheck count metrics
+- `render_promptguard_results(result: dict)`: Display PromptGuard count metrics
+- `render_factchecker_results(result: dict)`: Display FactChecker findings with counts
+- `render_datadisclosure_results(result: dict)`: Display DataDisclosureGuard PII findings with counts
 
 #### `multi_agent_demo/ui/deviation_results.py`
 **Purpose**: Deviation and bias results visualization
