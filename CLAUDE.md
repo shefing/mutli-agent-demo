@@ -6,10 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Running the Application
 ```bash
-# AI Agent Guards Multi-Page Application (NEW - recommended)
+# AI Agent Guards Multi-Page UI Application (recommended)
 streamlit run multi_agent_demo/app.py
 
-# Legacy single-page application (Real-time testing only)
+# CLI Batch Processing (scan multiple sessions)
+python -m multi_agent_demo.cli -d ./sessions
+python -m multi_agent_demo.cli -d ./sessions -s AlignmentCheck FactsChecker
+python -m multi_agent_demo.cli -d ./sessions -o report.md
+
+# Legacy single-page application (not recommended)
 streamlit run multi_agent_demo/guards_demo_ui.py
 ```
 
@@ -39,11 +44,16 @@ This is a demonstration application for testing AI Agent Guards (security scanne
 ### Module Structure (Refactored)
 The application is organized into specialized modules for maintainability:
 
-- **`app.py`**: Multi-page application entry point with navigation
-- **`guards_demo_ui.py`**: Legacy single-page entry point (Real-time only)
+- **`app.py`**: Multi-page UI application entry point with navigation
+- **`cli.py`**: CLI batch processing entry point
+- **`guards_demo_ui.py`**: Legacy single-page entry point (not recommended)
 - **`pages/`**: Page modules for multi-page application
   - `realtime_page.py`: Real-time conversation testing page
   - `deviations_page.py`: OTEL-based deviations analysis page
+- **`core/`**: Shared logic used by both UI and CLI
+  - `scanner_runner.py`: Scanner execution and result aggregation
+- **`reports/`**: Report generation for CLI
+  - `markdown_generator.py`: Markdown report formatting
 - **`firewall.py`**: Scanner orchestration and LlamaFirewall integration
 - **`scanners/`**: Scanner implementation classes
   - `nemo_scanners.py`: NeMo GuardRails scanner implementations

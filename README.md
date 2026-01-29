@@ -35,12 +35,15 @@ A comprehensive demonstration application for testing AI Agent security scanners
 
 ## Overview
 
-This application provides two complementary approaches to AI agent security and monitoring:
+This application provides three complementary approaches to AI agent security and monitoring:
 
-### 1. Real-Time Security Testing
+### 1. Real-Time Security Testing (UI)
 Interactive web interface for testing AI agent security scanners against custom conversation scenarios. Test how different security scanners detect malicious inputs, goal hijacking, data exfiltration, and factual inaccuracies.
 
-### 2. Post-Hoc Behavioral Analysis
+### 2. Batch Processing (CLI)
+Command-line tool for scanning multiple session files in batch. Process entire directories of conversation logs, get aggregated statistics, and generate markdown reports. Perfect for CI/CD integration, regression testing, and large-scale analysis.
+
+### 3. Post-Hoc Behavioral Analysis (UI)
 Analyze OpenTelemetry traces to detect temporal deviations and bias patterns in agent behavior over time. Identify behavioral drift, fairness issues, and compliance concerns from production telemetry data.
 
 ---
@@ -99,6 +102,16 @@ This project includes comprehensive documentation organized by topic:
 - **Visual Feedback**: Clear decision indicators with per-message counts and expandable details
 - **Test History**: Track scanner performance over multiple tests
 - **Save/Load**: Persist custom scenarios for reuse
+
+### Batch Processing CLI
+- **Directory Scanning**: Scan all JSON session files in a directory recursively
+- **Scanner Selection**: Run all scanners or specify which ones to use
+- **Progress Display**: Real-time progress bar with color-coded status
+- **Aggregated Statistics**: Overall counts across all sessions (blocks, warnings, safe)
+- **Markdown Reports**: Copyable markdown report with per-scanner and per-session results
+- **Smart Filtering**: Only shows sessions with issues (safe sessions counted but not detailed)
+- **File Output**: Save reports to file for documentation or CI/CD
+- **Shared Logic**: Uses same scanner code as UI for consistency
 
 ### Deviations Analysis Page
 - **OTEL Upload**: Upload OpenTelemetry JSON traces for analysis
@@ -371,14 +384,71 @@ Scanner selection is dynamic via Streamlit session state. Available scanners:
 ### Running the Application
 
 ```bash
-# Multi-page application (recommended)
+# Multi-page UI application (recommended)
 streamlit run multi_agent_demo/app.py
 
-# Legacy single-page application (Real-time testing only)
+# CLI batch processing
+python -m multi_agent_demo.cli -d ./sessions
+
+# Legacy single-page application (not recommended)
 streamlit run multi_agent_demo/guards_demo_ui.py
 ```
 
-Access the application at `http://localhost:8501`
+Access the UI application at `http://localhost:8501`
+
+### CLI Batch Processing
+
+Scan multiple session files in batch and generate markdown reports:
+
+```bash
+# Scan all JSON files in directory with all scanners
+python -m multi_agent_demo.cli -d ./sessions
+
+# Scan with specific scanners
+python -m multi_agent_demo.cli -d ./sessions -s AlignmentCheck FactsChecker
+
+# Save report to file
+python -m multi_agent_demo.cli -d ./sessions -o report.md
+
+# Include safe session details in report
+python -m multi_agent_demo.cli -d ./sessions --show-safe
+```
+
+**Available Scanners:**
+- `PromptGuard` - Malicious prompts and injections (BLOCK/WARNING/SAFE)
+- `AlignmentCheck` - Goal hijacking and behavioral drift (BLOCK/SAFE only)
+- `FactsChecker` - Contradictions and ungrounded claims (BLOCK/WARNING/SAFE)
+- `DataDisclosureGuard` - PII disclosure issues (BLOCK/WARNING/SAFE)
+
+**Output Example:**
+```
+Total Sessions: 52
+Safe Sessions: 39 ✅
+Sessions with Issues: 13 🚨
+
+Total Blocks: 15 🚫
+Total Warnings: 0 ⚠️  (Note: AlignmentCheck doesn't produce warnings)
+Total Safe: 628 ✅
+```
+
+The CLI generates a markdown report with:
+- Overall statistics across all sessions
+- Per-scanner breakdown (blocks, warnings, safe)
+- Detailed results for sessions with issues only
+- Copyable format for documentation
+
+**Session Format:**
+The CLI supports two formats:
+1. **Langfuse Export** (OpenOps): `agent_purpose`, `scenario_name`, `messages`
+2. **Simple Format**: `purpose`, `session_id`, `messages`
+
+Format is auto-detected. See [BATCH_CLI_GUIDE.md](./BATCH_CLI_GUIDE.md) for details.
+
+**Use Cases:**
+- CI/CD integration: Scan sessions before deployment
+- Regression testing: Ensure no new issues introduced
+- Large-scale analysis: Process hundreds of sessions
+- Documentation: Generate compliance reports
 
 ### Quick Start Guides
 
@@ -409,6 +479,41 @@ For comprehensive usage documentation, see **[DEVIATIONS_FEATURE.md](./DEVIATION
 ---
 
 ## Modules & Functions
+
+### Core Shared Logic
+
+#### `multi_agent_demo/core/scanner_runner.py`
+**Purpose**: Shared scanner execution logic used by both UI and CLI
+
+**Key Functions:**
+- `run_scanners_on_session(session_data: dict, enabled_scanners: list, agent_config: dict) -> dict`
+  - Run enabled scanners on a single session
+  - Extracts messages and purpose from session JSON
+  - Returns scanner results with counts and decisions
+
+- `aggregate_results(all_results: list) -> dict`
+  - Aggregate statistics across multiple sessions
+  - Returns total sessions, safe/unsafe counts, blocks/warnings/safe counts
+  - Breaks down results by scanner
+
+#### `multi_agent_demo/reports/markdown_generator.py`
+**Purpose**: Generate markdown reports for CLI batch processing
+
+**Key Functions:**
+- `generate_markdown_report(all_results: list, session_files: list, aggregated: dict, show_safe_details: bool) -> str`
+  - Generate formatted markdown report
+  - Includes overall statistics and per-scanner breakdown
+  - Shows detailed results for sessions with issues
+  - Returns copyable markdown string
+
+#### `multi_agent_demo/cli.py`
+**Purpose**: CLI entry point for batch processing
+
+**Key Features:**
+- Argument parsing for directory, scanners, output file
+- Progress bar with color-coded status
+- Batch session processing with error handling
+- Console and file output
 
 ### Core Orchestration
 
