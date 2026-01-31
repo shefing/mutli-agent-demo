@@ -38,10 +38,7 @@ def run_scanners_on_session(
           "messages": [...]
         }
     """
-    from multi_agent_demo.alignment_check_new import (
-        scan_alignment_check_per_message,
-        scan_prompt_guard_per_message
-    )
+    # Import scanners module (always needed for availability flags)
     from multi_agent_demo.scanners import (
         FactCheckerScanner,
         NEMO_GUARDRAILS_AVAILABLE,
@@ -72,6 +69,7 @@ def run_scanners_on_session(
     # Run AlignmentCheck
     if "AlignmentCheck" in enabled_scanners:
         try:
+            from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
             results["alignment_check"] = scan_alignment_check_per_message(
                 messages=messages,
                 purpose=purpose
@@ -82,6 +80,7 @@ def run_scanners_on_session(
     # Run PromptGuard
     if "PromptGuard" in enabled_scanners:
         try:
+            from multi_agent_demo.alignment_check_new import scan_prompt_guard_per_message
             results["prompt_guard"] = scan_prompt_guard_per_message(
                 messages=messages
             )
@@ -92,7 +91,7 @@ def run_scanners_on_session(
     if "FactsChecker" in enabled_scanners or "FactChecker" in enabled_scanners:
         if NEMO_GUARDRAILS_AVAILABLE:
             try:
-                scanner = FactCheckerScanner("nemo_config")
+                scanner = FactCheckerScanner()  # Fixed: no parameters
                 result = scanner.scan(messages, purpose)
                 results["nemo_results"]["FactsChecker"] = result
             except Exception as e:
@@ -161,20 +160,21 @@ def aggregate_results(all_results: List[dict]) -> dict:
                 by_scanner[scanner_name] = {"blocks": 0, "warnings": 0, "safe": 0}
 
             if "overall_decision" in ac:
-                if ac["overall_decision"] == "BLOCK":
+                # Add ALL counts (a scanner can have both blocks and warnings)
+                if "counts" in ac:
+                    counts = ac["counts"]
+                    total_blocks += counts.get("block", 0)
+                    total_warnings += counts.get("warning", 0)
+                    total_safe += counts.get("safe", 0)
+
+                    # Also add to per-scanner counts (actual message counts, not session counts)
+                    by_scanner[scanner_name]["blocks"] += counts.get("block", 0)
+                    by_scanner[scanner_name]["warnings"] += counts.get("warning", 0)
+                    by_scanner[scanner_name]["safe"] += counts.get("safe", 0)
+
+                # Check if session is safe
+                if ac["overall_decision"] in ["BLOCK", "WARNING"]:
                     session_is_safe = False
-                    by_scanner[scanner_name]["blocks"] += 1
-                    if "counts" in ac:
-                        total_blocks += ac["counts"].get("block", 0)
-                elif ac["overall_decision"] == "WARNING":
-                    session_is_safe = False
-                    by_scanner[scanner_name]["warnings"] += 1
-                    if "counts" in ac:
-                        total_warnings += ac["counts"].get("warning", 0)
-                else:
-                    by_scanner[scanner_name]["safe"] += 1
-                    if "counts" in ac:
-                        total_safe += ac["counts"].get("safe", 0)
 
         # Check PromptGuard
         if result.get("prompt_guard"):
@@ -184,42 +184,49 @@ def aggregate_results(all_results: List[dict]) -> dict:
                 by_scanner[scanner_name] = {"blocks": 0, "warnings": 0, "safe": 0}
 
             if "overall_decision" in pg:
-                if pg["overall_decision"] == "BLOCK":
+                # Add ALL counts (a scanner can have both blocks and warnings)
+                if "counts" in pg:
+                    counts = pg["counts"]
+                    total_blocks += counts.get("block", 0)
+                    total_warnings += counts.get("warning", 0)
+                    total_safe += counts.get("safe", 0)
+
+                    # Also add to per-scanner counts (actual message counts, not session counts)
+                    by_scanner[scanner_name]["blocks"] += counts.get("block", 0)
+                    by_scanner[scanner_name]["warnings"] += counts.get("warning", 0)
+                    by_scanner[scanner_name]["safe"] += counts.get("safe", 0)
+
+                # Check if session is safe
+                if pg["overall_decision"] in ["BLOCK", "WARNING"]:
                     session_is_safe = False
-                    by_scanner[scanner_name]["blocks"] += 1
-                    if "counts" in pg:
-                        total_blocks += pg["counts"].get("block", 0)
-                elif pg["overall_decision"] == "WARNING":
-                    session_is_safe = False
-                    by_scanner[scanner_name]["warnings"] += 1
-                    if "counts" in pg:
-                        total_warnings += pg["counts"].get("warning", 0)
-                else:
-                    by_scanner[scanner_name]["safe"] += 1
-                    if "counts" in pg:
-                        total_safe += pg["counts"].get("safe", 0)
 
         # Check NeMo scanners (FactsChecker, DataDisclosureGuard)
         for scanner_name, scanner_result in result.get("nemo_results", {}).items():
+            # Skip scanners with errors (not installed, etc.)
+            if "error" in scanner_result:
+                continue
+
             if scanner_name not in by_scanner:
                 by_scanner[scanner_name] = {"blocks": 0, "warnings": 0, "safe": 0}
 
             if "overall_decision" in scanner_result:
                 decision = scanner_result["overall_decision"]
-                if decision == "BLOCK":
+
+                # Add ALL counts (a scanner can have both blocks and warnings, like FactsChecker)
+                if "counts" in scanner_result:
+                    counts = scanner_result["counts"]
+                    total_blocks += counts.get("block", 0)
+                    total_warnings += counts.get("warning", 0)
+                    total_safe += counts.get("safe", 0)
+
+                    # Also add to per-scanner counts (actual message counts, not session counts)
+                    by_scanner[scanner_name]["blocks"] += counts.get("block", 0)
+                    by_scanner[scanner_name]["warnings"] += counts.get("warning", 0)
+                    by_scanner[scanner_name]["safe"] += counts.get("safe", 0)
+
+                # Check if session is safe
+                if decision in ["BLOCK", "WARNING"]:
                     session_is_safe = False
-                    by_scanner[scanner_name]["blocks"] += 1
-                    if "counts" in scanner_result:
-                        total_blocks += scanner_result["counts"].get("block", 0)
-                elif decision == "WARNING":
-                    session_is_safe = False
-                    by_scanner[scanner_name]["warnings"] += 1
-                    if "counts" in scanner_result:
-                        total_warnings += scanner_result["counts"].get("warning", 0)
-                else:
-                    by_scanner[scanner_name]["safe"] += 1
-                    if "counts" in scanner_result:
-                        total_safe += scanner_result["counts"].get("safe", 0)
 
         if session_is_safe:
             safe_sessions += 1

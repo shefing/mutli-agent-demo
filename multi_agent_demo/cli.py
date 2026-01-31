@@ -235,6 +235,17 @@ Available Scanners:
         print()
         print(report)
 
+    # Check for scanner errors
+    scanner_errors = {}
+    for result in all_results:
+        if result.get("alignment_check") and "error" in result["alignment_check"]:
+            scanner_errors["AlignmentCheck"] = result["alignment_check"]["error"]
+        if result.get("prompt_guard") and "error" in result["prompt_guard"]:
+            scanner_errors["PromptGuard"] = result["prompt_guard"]["error"]
+        for scanner_name, scanner_result in result.get("nemo_results", {}).items():
+            if "error" in scanner_result:
+                scanner_errors[scanner_name] = scanner_result["error"]
+
     # Print summary
     print()
     print_colored("=" * 80, Colors.CYAN)
@@ -249,6 +260,15 @@ Available Scanners:
     print_colored(f"Total Warnings: {aggregated['total_warnings']} ⚠️", Colors.YELLOW if aggregated['total_warnings'] > 0 else Colors.GREEN)
     print_colored(f"Total Safe: {aggregated['total_safe']} ✅", Colors.GREEN)
     print()
+
+    # Show scanner errors if any
+    if scanner_errors:
+        print_colored("⚠️  SCANNER ERRORS", Colors.YELLOW)
+        print()
+        for scanner_name, error in scanner_errors.items():
+            print_colored(f"  • {scanner_name}: {error}", Colors.YELLOW)
+        print()
+
     print_colored("=" * 80, Colors.CYAN)
 
 

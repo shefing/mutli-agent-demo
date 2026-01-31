@@ -457,11 +457,14 @@ Provide a clear explanation."""
         all_findings = issues_found + warnings_found
 
         # Calculate counts for normalized format
-        # Count BLOCK = self-contradictions, WARNING = ungrounded, SAFE = neither
+        # Note:
+        # - Self-contradiction is detected ACROSS messages (not per-message)
+        # - Ungrounded claims are detected PER message
+        # - A message can have ungrounded claims AND be part of a contradiction
         counts = {
-            "block": 1 if has_contradiction else 0,
-            "warning": len(ungrounded_messages),
-            "safe": len(assistant_messages) - len(ungrounded_messages) - (1 if has_contradiction else 0),
+            "block": 1 if has_contradiction else 0,  # 1 contradiction event (not per-message)
+            "warning": len(ungrounded_messages),  # Count of messages with ungrounded claims
+            "safe": len(assistant_messages) - len(ungrounded_messages),  # Messages without issues
             "total": len(assistant_messages)
         }
 
