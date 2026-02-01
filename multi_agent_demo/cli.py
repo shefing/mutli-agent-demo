@@ -228,12 +228,13 @@ Available Scanners:
             f.write(report)
         print_colored(f"✅ Report saved to: {args.output}", Colors.GREEN)
     else:
-        # Print to console
-        print_colored("=" * 80, Colors.CYAN)
-        print_colored("📄 MARKDOWN REPORT (copy and paste)", Colors.BOLD + Colors.CYAN)
-        print_colored("=" * 80, Colors.CYAN)
+        # Print to console (markdown only, no color codes)
         print()
-        print(report)
+        print("=" * 80)
+        print("📄 MARKDOWN REPORT (copy and paste)")
+        print("=" * 80)
+        print()
+        print(report)  # Just the markdown, no color codes
 
     # Check for scanner errors
     scanner_errors = {}

@@ -63,6 +63,57 @@ def generate_markdown_report(
     lines.append("---")
     lines.append("")
 
+    # Summary Table (all sessions with scanner results)
+    lines.append("## 📋 Sessions Summary")
+    lines.append("")
+
+    # Build table header
+    scanner_names = list(aggregated['by_scanner'].keys())
+    header = "| Session | " + " | ".join(scanner_names) + " |"
+    separator = "|---------|" + "|".join(["---------"] * len(scanner_names)) + "|"
+
+    lines.append(header)
+    lines.append(separator)
+
+    # Build table rows
+    for i, (result, session_file) in enumerate(zip(all_results, session_files), 1):
+        session_name = session_file.split('/')[-1]
+        row = f"| {session_name} |"
+
+        for scanner_name in scanner_names:
+            # Get scanner result for this session
+            scanner_result = None
+            if scanner_name == "AlignmentCheck":
+                scanner_result = result.get("alignment_check")
+            elif scanner_name == "PromptGuard":
+                scanner_result = result.get("prompt_guard")
+            else:
+                scanner_result = result.get("nemo_results", {}).get(scanner_name)
+
+            # Extract blocks and warnings
+            if scanner_result and "counts" in scanner_result and "error" not in scanner_result:
+                blocks = scanner_result["counts"].get("block", 0)
+                warnings = scanner_result["counts"].get("warning", 0)
+
+                if blocks > 0 and warnings > 0:
+                    cell = f" 🚫 {blocks} ⚠️ {warnings} |"
+                elif blocks > 0:
+                    cell = f" 🚫 {blocks} |"
+                elif warnings > 0:
+                    cell = f" ⚠️ {warnings} |"
+                else:
+                    cell = " ✅ |"
+            else:
+                cell = " - |"  # No data or error
+
+            row += cell
+
+        lines.append(row)
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
     # Detailed Results (only sessions with issues, unless show_safe_details=True)
     lines.append("## 📋 Detailed Results per Session")
     lines.append("")
