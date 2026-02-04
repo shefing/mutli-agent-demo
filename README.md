@@ -825,6 +825,7 @@ The project includes automated tests to verify scanner functionality and data pr
 | `test_alignment_fix.py` | DataDisclosureGuard alignment checking | Verifies misaligned PII disclosure (e.g., asking for SSN when requesting weather) is correctly detected | No |
 | `test_deviations.py` | Deviation and bias detection | Tests temporal deviations (refunds increasing over time) and bias patterns (age bias in hiring) | No |
 | `test_alignment_check.py` | AlignmentCheck scanner automation | Tests goal hijacking detection, off-topic redirects, and aligned conversations | Yes (TOGETHER_API_KEY) |
+| `test_alignment_check_fixes.py` | AlignmentCheck critical bug fixes | **Regression tests** for parsing bug ("NO" substring) and semantic confusion (agent analysis vs agent failure) | Yes (TOGETHER_API_KEY) |
 | `test_alignment.py` | Interactive AlignmentCheck testing | Menu-driven interface for testing AlignmentCheck scanner (legacy) | No |
 
 #### Running Tests
@@ -841,6 +842,9 @@ python test_deviations.py
 # Optional: AlignmentCheck scanner test (requires TOGETHER_API_KEY)
 export TOGETHER_API_KEY=your_key_here
 python test_alignment_check.py
+
+# Regression test for AlignmentCheck critical bug fixes (requires TOGETHER_API_KEY)
+python test_alignment_check_fixes.py
 
 # Interactive AlignmentCheck tester (legacy)
 python test_alignment.py
@@ -878,17 +882,21 @@ The project uses GitHub Actions to automatically run tests on commits to the `ma
 - ✅ `test_alignment_fix.py` - DataDisclosureGuard PII alignment checking
 - ✅ `test_deviations.py` - Temporal deviation and bias detection
 
-**AlignmentCheck Test (API Key Configured ✅):**
+**AlignmentCheck Tests (API Key Configured ✅):**
 - ✅ `test_alignment_check.py` - AlignmentCheck goal hijacking detection
   - **Status:** ENABLED (TOGETHER_API_KEY configured)
   - **Cost:** ~$0.18/1M tokens per test run
   - **Tests:** Goal hijacking, off-topic redirects, aligned conversations
+- ✅ `test_alignment_check_fixes.py` - AlignmentCheck regression tests
+  - **Status:** ENABLED (TOGETHER_API_KEY configured)
+  - **Cost:** ~$0.20/1M tokens per test run
+  - **Tests:** Parsing bug fix ("NO" substring), semantic confusion fix (agent analysis vs failure)
   - **Note:** To disable, remove `TOGETHER_API_KEY` from GitHub repository secrets
 
 **Test Summary:**
-- **Total tests:** 4/4 (3 core + 1 AlignmentCheck)
-- **API costs:** ~$0.01-0.02 per CI/CD run (AlignmentCheck only)
-- **Run time:** ~5-8 minutes total
+- **Total tests:** 5/5 (3 core + 2 AlignmentCheck)
+- **API costs:** ~$0.01-0.03 per CI/CD run (AlignmentCheck tests only)
+- **Run time:** ~6-10 minutes total
 
 **What You'll See in GitHub Actions:**
 ```
