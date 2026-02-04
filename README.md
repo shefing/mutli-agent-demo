@@ -206,8 +206,7 @@ pip install llamafirewall
 pip install nemoguardrails
 
 # 3. Configure environment (create .env file)
-OPENAI_API_KEY=your_key
-TOGETHER_API_KEY=your_key
+OPENAI_API_KEY=your_key  # Required for FactChecker and AlignmentCheck
 HF_TOKEN=your_token  # optional
 
 # 4. Run application
@@ -247,8 +246,7 @@ python-dotenv>=1.0.0,<2.0.0        # Environment variables
 
 | Service | Model | Purpose | API Key Required |
 |---------|-------|---------|------------------|
-| **OpenAI** | `gpt-4o-mini` | Fact-checking (FactChecker scanner) | `OPENAI_API_KEY` |
-| **Together AI** | `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo` | Behavioral alignment checking (AlignmentCheck scanner) | `TOGETHER_API_KEY` |
+| **OpenAI** | `gpt-4o-mini` | Fact-checking (FactChecker scanner) and behavioral alignment checking (AlignmentCheck scanner) | `OPENAI_API_KEY` |
 | **HuggingFace** | PromptGuard models (via LlamaFirewall) | Prompt injection detection | `HF_TOKEN` (optional but recommended) |
 
 ### LLM Usage Details
@@ -346,9 +344,6 @@ Create a `.env` file in the project root:
 ```bash
 # Required for FactChecker scanner
 OPENAI_API_KEY=sk-proj-...
-
-# Required for AlignmentCheck scanner
-TOGETHER_API_KEY=...
 
 # Optional but recommended for PromptGuard
 HF_TOKEN=hf_...
@@ -824,8 +819,8 @@ The project includes automated tests to verify scanner functionality and data pr
 | `test_data_disclosure_fix.py` | DataDisclosureGuard false positive filtering | Verifies technical data (product IDs, SKUs, browser versions, timestamps) are NOT flagged as PII | No |
 | `test_alignment_fix.py` | DataDisclosureGuard alignment checking | Verifies misaligned PII disclosure (e.g., asking for SSN when requesting weather) is correctly detected | No |
 | `test_deviations.py` | Deviation and bias detection | Tests temporal deviations (refunds increasing over time) and bias patterns (age bias in hiring) | No |
-| `test_alignment_check.py` | AlignmentCheck scanner automation | Tests goal hijacking detection, off-topic redirects, and aligned conversations | Yes (TOGETHER_API_KEY) |
-| `test_alignment_check_fixes.py` | AlignmentCheck critical bug fixes | **Regression tests** for parsing bug ("NO" substring) and semantic confusion (agent analysis vs agent failure) | Yes (TOGETHER_API_KEY) |
+| `test_alignment_check.py` | AlignmentCheck scanner automation | Tests goal hijacking detection, off-topic redirects, and aligned conversations | Yes (OPENAI_API_KEY) |
+| `test_alignment_check_fixes.py` | AlignmentCheck critical bug fixes | **Regression tests** for parsing bug ("NO" substring) and semantic confusion (agent analysis vs agent failure) | Yes (OPENAI_API_KEY) |
 | `test_alignment.py` | Interactive AlignmentCheck testing | Menu-driven interface for testing AlignmentCheck scanner (legacy) | No |
 
 #### Running Tests
@@ -839,11 +834,11 @@ python test_data_disclosure_fix.py
 python test_alignment_fix.py
 python test_deviations.py
 
-# Optional: AlignmentCheck scanner test (requires TOGETHER_API_KEY)
-export TOGETHER_API_KEY=your_key_here
+# Optional: AlignmentCheck scanner test (requires OPENAI_API_KEY)
+export OPENAI_API_KEY=your_key_here
 python test_alignment_check.py
 
-# Regression test for AlignmentCheck critical bug fixes (requires TOGETHER_API_KEY)
+# Regression test for AlignmentCheck critical bug fixes (requires OPENAI_API_KEY)
 python test_alignment_check_fixes.py
 
 # Interactive AlignmentCheck tester (legacy)
@@ -856,8 +851,8 @@ python test_alignment.py
 python test_data_disclosure_fix.py
 # Expected: ✅ TEST PASSED: No false positives detected!
 
-# Test AlignmentCheck scanner (requires TOGETHER_API_KEY)
-export TOGETHER_API_KEY=your_key_here
+# Test AlignmentCheck scanner (requires OPENAI_API_KEY)
+export OPENAI_API_KEY=your_key_here
 python test_alignment_check.py
 # Expected: ✅ ALL TESTS PASSED (4/4 tests passed)
 ```
@@ -884,14 +879,16 @@ The project uses GitHub Actions to automatically run tests on commits to the `ma
 
 **AlignmentCheck Tests (API Key Configured ✅):**
 - ✅ `test_alignment_check.py` - AlignmentCheck goal hijacking detection
-  - **Status:** ENABLED (TOGETHER_API_KEY configured)
-  - **Cost:** ~$0.18/1M tokens per test run
+  - **Status:** ENABLED (OPENAI_API_KEY configured)
+  - **Model:** GPT-4o-mini (switched from Llama-3.1-8B for better reasoning)
+  - **Cost:** ~$0.15/1M input tokens, ~$0.60/1M output tokens
   - **Tests:** Goal hijacking, off-topic redirects, aligned conversations
 - ✅ `test_alignment_check_fixes.py` - AlignmentCheck regression tests
-  - **Status:** ENABLED (TOGETHER_API_KEY configured)
-  - **Cost:** ~$0.20/1M tokens per test run
+  - **Status:** ENABLED (OPENAI_API_KEY configured)
+  - **Model:** GPT-4o-mini
+  - **Cost:** ~$0.15/1M input tokens, ~$0.60/1M output tokens
   - **Tests:** Parsing bug fix ("NO" substring), semantic confusion fix (agent analysis vs failure)
-  - **Note:** To disable, remove `TOGETHER_API_KEY` from GitHub repository secrets
+  - **Note:** To disable, remove `OPENAI_API_KEY` from GitHub repository secrets (also disables FactChecker)
 
 **Test Summary:**
 - **Total tests:** 5/5 (3 core + 2 AlignmentCheck)
@@ -939,9 +936,8 @@ git remote add hf https://huggingface.co/spaces/YOUR_USERNAME/ai-guards-demo
 git push hf main
 
 # Add secrets in HF Spaces settings
-# - OPENAI_API_KEY
-# - TOGETHER_API_KEY
-# - HF_TOKEN
+# - OPENAI_API_KEY (required for FactChecker and AlignmentCheck)
+# - HF_TOKEN (optional)
 ```
 
 Your app will be live at: `https://huggingface.co/spaces/YOUR_USERNAME/ai-guards-demo`

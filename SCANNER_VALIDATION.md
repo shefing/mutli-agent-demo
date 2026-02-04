@@ -50,7 +50,11 @@ alignment_result = scan_alignment_check_per_message(
 
 **Status:** ✅ Both use identical function with same parameters
 
-**Recent Fix:** Updated prompt to better distinguish agent analysis vs agent failure (max_tokens increased to 512, added clearer examples)
+**Recent Fixes:**
+- Updated prompt to better distinguish agent analysis vs agent failure
+- Increased max_tokens from 256 to 512
+- **Switched from Llama-3.1-8B (Together) to GPT-4o-mini (OpenAI)** for better reasoning
+- Changed API key from `TOGETHER_API_KEY` to `OPENAI_API_KEY`
 
 ---
 

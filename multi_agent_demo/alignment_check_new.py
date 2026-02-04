@@ -14,10 +14,10 @@ def _check_single_message_alignment(
     message: Dict,
     context_messages: List[Dict],
     purpose: str,
-    together_key: str
+    openai_key: str
 ) -> Dict:
     """
-    Check alignment for a single assistant message
+    Check alignment for a single assistant message using GPT-4o-mini
     Returns: {"decision": "SAFE|BLOCK", "reason": "...", "message_index": N}
     """
     # Build context: all messages up to and including this one
@@ -79,12 +79,12 @@ RESPONSE FORMAT:
 Response limit: 100 words."""
 
     headers = {
-        "Authorization": f"Bearer {together_key}",
+        "Authorization": f"Bearer {openai_key}",
         "Content-Type": "application/json"
     }
 
     payload = {
-        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 512,
         "temperature": 0.1
@@ -97,7 +97,7 @@ Response limit: 100 words."""
     for attempt in range(max_retries):
         try:
             response = requests.post(
-                "https://api.together.xyz/v1/chat/completions",
+                "https://api.openai.com/v1/chat/completions",
                 headers=headers,
                 json=payload,
                 timeout=30
@@ -107,7 +107,7 @@ Response limit: 100 words."""
                 break
 
             if response.status_code == 503 and attempt < max_retries - 1:
-                print(f"⚠️ Together API unavailable (503), retrying...")
+                print(f"⚠️ OpenAI API unavailable (503), retrying...")
                 time.sleep(retry_delay)
                 retry_delay *= 2
                 continue
@@ -116,7 +116,7 @@ Response limit: 100 words."""
 
         except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
-                print(f"⚠️ Together API timeout, retrying...")
+                print(f"⚠️ OpenAI API timeout, retrying...")
                 time.sleep(retry_delay)
                 retry_delay *= 2
                 continue
@@ -180,17 +180,17 @@ Response limit: 100 words."""
 
 def scan_alignment_check_per_message(messages: List[Dict], purpose: str) -> Dict:
     """
-    AlignmentCheck scan with per-message validation
+    AlignmentCheck scan with per-message validation using GPT-4o-mini
     Validates each assistant message individually
     Returns normalized counts: safe, warning, block
     """
     print(f"\n{'='*80}")
-    print(f"🔍 AlignmentCheck: Validating assistant messages")
+    print(f"🔍 AlignmentCheck: Validating assistant messages (GPT-4o-mini)")
     print(f"{'='*80}\n")
 
-    together_key = os.getenv("TOGETHER_API_KEY")
-    if not together_key:
-        return {"error": "TOGETHER_API_KEY not configured", "scanner": "AlignmentCheck"}
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        return {"error": "OPENAI_API_KEY not configured", "scanner": "AlignmentCheck"}
 
     # Filter to only assistant messages
     assistant_messages = [(i, msg) for i, msg in enumerate(messages) if msg.get("type") == "assistant"]
@@ -215,7 +215,7 @@ def scan_alignment_check_per_message(messages: List[Dict], purpose: str) -> Dict
             message=msg,
             context_messages=messages,
             purpose=purpose,
-            together_key=together_key
+            openai_key=openai_key
         )
         message_results.append(result)
         print(f"    → {result['decision']}: {result['reason'][:60]}...")
