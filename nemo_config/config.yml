@@ -3,6 +3,8 @@ models:
   - type: main
     engine: openai
     model: gpt-4o-mini
+    parameters:
+      temperature: 0.0  # More deterministic (0 = most deterministic, 1 = most random)
 
 prompts:
   # RAG Groundedness Check - validates if response is grounded in provided evidence
