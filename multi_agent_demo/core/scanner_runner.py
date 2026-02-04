@@ -91,8 +91,9 @@ def run_scanners_on_session(
     if "FactsChecker" in enabled_scanners or "FactChecker" in enabled_scanners:
         if NEMO_GUARDRAILS_AVAILABLE:
             try:
-                scanner = FactCheckerScanner()  # Fixed: no parameters
-                result = scanner.scan(messages, purpose)
+                scanner = FactCheckerScanner()
+                # Use explicit keyword arg 'context' to match method signature
+                result = scanner.scan(messages, context=purpose)
                 results["nemo_results"]["FactsChecker"] = result
             except Exception as e:
                 results["nemo_results"]["FactsChecker"] = {"error": str(e)}

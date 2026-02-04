@@ -192,16 +192,16 @@ def test_alignment_check(firewall, trace: Trace, messages: List[Dict] = None, pu
             "is_safe": result.decision == ScanDecision.ALLOW
         }
     except SyntaxError as e:
-        # Syntax error - try direct API fallback
+        # Syntax error - try direct API fallback (use NEW per-message scanner)
         print(f"⚠️ LlamaFirewall AlignmentCheck failed with SyntaxError, trying direct API fallback...")
         if messages is not None:
-            return scan_alignment_check_direct(messages, purpose)
+            return scan_alignment_check_per_message(messages, purpose)
         return {"error": f"SyntaxError and no messages for fallback: {str(e)}", "scanner": "AlignmentCheck"}
     except Exception as e:
-        # Other errors - try direct API fallback if available
+        # Other errors - try direct API fallback if available (use NEW per-message scanner)
         print(f"⚠️ LlamaFirewall AlignmentCheck failed: {str(e)}, trying direct API fallback...")
         if messages is not None:
-            return scan_alignment_check_direct(messages, purpose)
+            return scan_alignment_check_per_message(messages, purpose)
         return {"error": str(e), "scanner": "AlignmentCheck"}
 
 
