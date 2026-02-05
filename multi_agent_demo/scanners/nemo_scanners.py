@@ -9,10 +9,10 @@ import os
 try:
     from nemoguardrails import LLMRails, RailsConfig
     NEMO_GUARDRAILS_AVAILABLE = True
-    print("✅ NeMo GuardRails loaded successfully")
+    # Print only when actually instantiated, not at import time
 except ImportError:
     NEMO_GUARDRAILS_AVAILABLE = False
-    print("⚠️ NeMo GuardRails not available - install with: pip install nemoguardrails")
+    # Print only when actually instantiated, not at import time
 
 
 class NemoGuardRailsScanner:
@@ -37,6 +37,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
     def __init__(self):
         """Initialize with proper NeMo GuardRails configuration"""
         if NEMO_GUARDRAILS_AVAILABLE:
+            print("✅ NeMo GuardRails loaded successfully")
             try:
                 # CRITICAL: Disable spaCy model downloads to avoid permission errors on Streamlit Cloud
                 os.environ['SPACY_MODEL_DISABLED'] = '1'

@@ -70,6 +70,10 @@ This project includes comprehensive documentation organized by topic:
   - Detection patterns and scoring
   - Testing and troubleshooting
 
+### Batch Processing & Reports
+- **[BATCH_CLI_GUIDE.md](./BATCH_CLI_GUIDE.md)** - Complete CLI batch processing guide
+- **[BATCH_CLI_REPORT_FORMAT.md](./BATCH_CLI_REPORT_FORMAT.md)** - Report format and Google Sheets integration
+
 ### Deployment & CI/CD
 - **[HF_SPACES_DEPLOYMENT.md](./HF_SPACES_DEPLOYMENT.md)** - Deploy to Hugging Face Spaces (5 minutes)
 - **[STREAMLIT_CLOUD_FIX.md](./STREAMLIT_CLOUD_FIX.md)** - Streamlit Cloud deployment fixes

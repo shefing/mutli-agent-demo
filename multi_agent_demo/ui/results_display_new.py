@@ -7,6 +7,25 @@ import streamlit as st
 import pandas as pd
 
 
+def _get_role_specific_number(messages: list, message_index: int, message_type: str) -> int:
+    """
+    Calculate role-specific message number (e.g., User #1, Assistant #2)
+
+    Args:
+        messages: Full conversation message list
+        message_index: Overall message index
+        message_type: "user" or "assistant"
+
+    Returns:
+        Role-specific number (1-indexed)
+    """
+    count = 0
+    for i in range(message_index + 1):
+        if i < len(messages) and messages[i].get("type") == message_type:
+            count += 1
+    return count
+
+
 def render_overall_decision(result: dict):
     """Render overall decision badge at top"""
     st.markdown("## 🎯 Overall Decision")
@@ -61,8 +80,8 @@ def render_overall_decision(result: dict):
     )
 
 
-def render_scanner_counts(scanner_name: str, result: dict):
-    """Render counts for a single scanner"""
+def render_scanner_counts(scanner_name: str, result: dict, messages: list = None):
+    """Render counts for a single scanner with role-specific message numbering"""
     if not result or "error" in result:
         st.error(f"❌ {scanner_name}: Error - {result.get('error', 'Unknown error')}")
         return
@@ -122,8 +141,15 @@ def render_scanner_counts(scanner_name: str, result: dict):
                     decision = msg_result.get("decision", "SAFE")
                     reason = msg_result.get("reason", "No details available")
 
-                    st.markdown(f"**Message #{msg_idx} ({msg_type}):** {decision_icon} {decision}")
-                    with st.expander(f"Details for Message #{msg_idx}", expanded=False):
+                    # Get role-specific number (e.g., User #1, Assistant #2)
+                    if messages and isinstance(msg_idx, int):
+                        role_number = _get_role_specific_number(messages, msg_idx, msg_type)
+                        role_label = f"{msg_type.capitalize()} #{role_number}"
+                    else:
+                        role_label = f"Message #{msg_idx} ({msg_type})"
+
+                    st.markdown(f"**{role_label}:** {decision_icon} {decision}")
+                    with st.expander(f"Details for {role_label}", expanded=False):
                         st.text(reason)
                     st.divider()
 
@@ -229,6 +255,9 @@ def render_test_results_new():
 
     latest_result = st.session_state.test_results[-1]
 
+    # Get messages for role-specific numbering
+    messages = st.session_state.current_conversation.get("messages", [])
+
     # Overall Decision (big badge at top)
     render_overall_decision(latest_result)
 
@@ -239,17 +268,17 @@ def render_test_results_new():
 
     # AlignmentCheck
     if latest_result.get("alignment_check"):
-        render_scanner_counts("AlignmentCheck", latest_result["alignment_check"])
+        render_scanner_counts("AlignmentCheck", latest_result["alignment_check"], messages)
         st.divider()
 
     # PromptGuard
     if latest_result.get("prompt_guard"):
-        render_scanner_counts("PromptGuard", latest_result["prompt_guard"])
+        render_scanner_counts("PromptGuard", latest_result["prompt_guard"], messages)
         st.divider()
 
     # NeMo scanners
     for scanner_name, scanner_result in latest_result.get("nemo_results", {}).items():
-        render_scanner_counts(scanner_name, scanner_result)
+        render_scanner_counts(scanner_name, scanner_result, messages)
         st.divider()
 
     # Test History Summary

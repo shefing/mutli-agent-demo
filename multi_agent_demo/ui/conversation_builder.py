@@ -42,14 +42,25 @@ def render_conversation_builder():
     st.divider()
     st.subheader("💬 Conversation Builder")
 
-    # Display current conversation
+    # Display current conversation with role-specific numbering
+    user_count = 0
+    assistant_count = 0
+
     for i, msg in enumerate(st.session_state.current_conversation["messages"]):
+        # Count messages by role for numbering
+        if msg["type"] == "user":
+            user_count += 1
+            role_number = user_count
+        else:  # assistant
+            assistant_count += 1
+            role_number = assistant_count
+
         if st.session_state.editing_message_index == i:
             # Editing mode for this message
             _render_message_editor(i, msg)
         else:
             # Normal display mode with edit/delete buttons
-            _render_message_display(i, msg)
+            _render_message_display(i, msg, role_number)
 
     # Add new message
     _render_message_adder()
@@ -136,12 +147,14 @@ def _render_message_editor(index: int, msg: dict):
                         st.rerun()
 
 
-def _render_message_display(index: int, msg: dict):
-    """Render message display with edit/delete buttons"""
+def _render_message_display(index: int, msg: dict, role_number: int):
+    """Render message display with edit/delete buttons and role-specific numbering"""
     if msg["type"] == "user":
         with st.chat_message("user"):
             col_msg, col_btns = st.columns([4, 1])
             with col_msg:
+                # Show message number (User #1, User #2, etc.)
+                st.caption(f"User #{role_number}")
                 # Render markdown for better formatting (headings, bold, tables, etc.)
                 st.markdown(msg["content"])
             with col_btns:
@@ -158,6 +171,8 @@ def _render_message_display(index: int, msg: dict):
         with st.chat_message("assistant"):
             col_msg, col_btns = st.columns([4, 1])
             with col_msg:
+                # Show message number (Assistant #1, Assistant #2, etc.)
+                st.caption(f"Assistant #{role_number}")
                 if msg.get("action"):
                     st.write(f"**Action:** `{msg['action']}`")
                     st.write("**Thought:**")

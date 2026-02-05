@@ -21,7 +21,12 @@ def generate_markdown_report(
         show_safe_details: Whether to show details for safe sessions
 
     Returns:
-        Markdown formatted report string
+        Markdown formatted report string with:
+        - Overall statistics
+        - Per-scanner breakdown
+        - Sessions summary table (Google Sheets compatible)
+        - Copy-paste TSV format
+        - Detailed per-session results
     """
     lines = []
 
@@ -63,14 +68,21 @@ def generate_markdown_report(
     lines.append("---")
     lines.append("")
 
-    # Summary Table (all sessions with scanner results)
-    lines.append("## 📋 Sessions Summary")
+    # Summary Table (all sessions with scanner results) - Google Sheets friendly
+    lines.append("## 📋 Sessions Summary Table")
+    lines.append("")
+    lines.append("**Format:** Each cell shows `DECISION (total: safe/warning/block)`")
+    lines.append("")
+    lines.append("- **SAFE**: No issues detected")
+    lines.append("- **WARNING**: Minor issues detected")
+    lines.append("- **BLOCK**: Critical issues detected")
+    lines.append("- **Overall**: Worst decision across all scanners (BLOCK > WARNING > SAFE)")
     lines.append("")
 
-    # Build table header
+    # Build table header with Overall column
     scanner_names = list(aggregated['by_scanner'].keys())
-    header = "| Session | " + " | ".join(scanner_names) + " |"
-    separator = "|---------|" + "|".join(["---------"] * len(scanner_names)) + "|"
+    header = "| Session | " + " | ".join(scanner_names) + " | Overall |"
+    separator = "|---------|" + "|".join(["---------"] * len(scanner_names)) + "|---------|"
 
     lines.append(header)
     lines.append(separator)
@@ -79,6 +91,9 @@ def generate_markdown_report(
     for i, (result, session_file) in enumerate(zip(all_results, session_files), 1):
         session_name = session_file.split('/')[-1]
         row = f"| {session_name} |"
+
+        # Track overall decision for this session
+        session_decisions = []
 
         for scanner_name in scanner_names:
             # Get scanner result for this session
@@ -90,26 +105,113 @@ def generate_markdown_report(
             else:
                 scanner_result = result.get("nemo_results", {}).get(scanner_name)
 
-            # Extract blocks and warnings
+            # Format cell with decision and counts
             if scanner_result and "counts" in scanner_result and "error" not in scanner_result:
-                blocks = scanner_result["counts"].get("block", 0)
+                safe = scanner_result["counts"].get("safe", 0)
                 warnings = scanner_result["counts"].get("warning", 0)
+                blocks = scanner_result["counts"].get("block", 0)
+                total = scanner_result["counts"].get("total", safe + warnings + blocks)
+                decision = scanner_result.get("overall_decision", "SAFE")
 
-                if blocks > 0 and warnings > 0:
-                    cell = f" 🚫 {blocks} ⚠️ {warnings} |"
-                elif blocks > 0:
-                    cell = f" 🚫 {blocks} |"
-                elif warnings > 0:
-                    cell = f" ⚠️ {warnings} |"
+                # Track for overall decision
+                session_decisions.append(decision)
+
+                # Format: "DECISION (total: safe/warning/block)"
+                if total > 0:
+                    cell = f" {decision} ({total}: {safe}/{warnings}/{blocks}) |"
                 else:
-                    cell = " ✅ |"
+                    cell = f" {decision} |"
+            elif scanner_result and "error" in scanner_result:
+                cell = " ERROR |"
             else:
-                cell = " - |"  # No data or error
+                cell = " - |"  # Not run
 
             row += cell
 
+        # Add overall decision column (BLOCK > WARNING > SAFE)
+        if "BLOCK" in session_decisions:
+            overall = "BLOCK"
+        elif "WARNING" in session_decisions:
+            overall = "WARNING"
+        elif session_decisions and all(d == "SAFE" for d in session_decisions):
+            overall = "SAFE"
+        else:
+            overall = "-"
+
+        row += f" {overall} |"
+
         lines.append(row)
 
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # Add copy-paste friendly TSV format for Google Sheets
+    lines.append("## 📊 Copy-Paste Format (Tab-Separated)")
+    lines.append("")
+    lines.append("**How to use:**")
+    lines.append("1. Click inside the code block below")
+    lines.append("2. Select all text (Cmd+A / Ctrl+A)")
+    lines.append("3. Copy (Cmd+C / Ctrl+C)")
+    lines.append("4. Open Google Sheets and paste (Cmd+V / Ctrl+V)")
+    lines.append("5. Data will automatically separate into columns")
+    lines.append("")
+    lines.append("```")
+
+    # Build TSV header
+    tsv_header = "Session\t" + "\t".join(scanner_names) + "\tOverall"
+    lines.append(tsv_header)
+
+    # Build TSV rows
+    for i, (result, session_file) in enumerate(zip(all_results, session_files), 1):
+        session_name = session_file.split('/')[-1]
+        row_parts = [session_name]
+
+        session_decisions = []
+
+        for scanner_name in scanner_names:
+            # Get scanner result for this session
+            scanner_result = None
+            if scanner_name == "AlignmentCheck":
+                scanner_result = result.get("alignment_check")
+            elif scanner_name == "PromptGuard":
+                scanner_result = result.get("prompt_guard")
+            else:
+                scanner_result = result.get("nemo_results", {}).get(scanner_name)
+
+            # Format cell
+            if scanner_result and "counts" in scanner_result and "error" not in scanner_result:
+                safe = scanner_result["counts"].get("safe", 0)
+                warnings = scanner_result["counts"].get("warning", 0)
+                blocks = scanner_result["counts"].get("block", 0)
+                decision = scanner_result.get("overall_decision", "SAFE")
+                session_decisions.append(decision)
+
+                # Format: "DECISION (S/W/B)"
+                cell_value = f"{decision} ({safe}/{warnings}/{blocks})"
+            elif scanner_result and "error" in scanner_result:
+                cell_value = "ERROR"
+            else:
+                cell_value = "-"
+
+            row_parts.append(cell_value)
+
+        # Add overall decision
+        if "BLOCK" in session_decisions:
+            overall = "BLOCK"
+        elif "WARNING" in session_decisions:
+            overall = "WARNING"
+        elif session_decisions and all(d == "SAFE" for d in session_decisions):
+            overall = "SAFE"
+        else:
+            overall = "-"
+
+        row_parts.append(overall)
+
+        # Join with tabs
+        lines.append("\t".join(row_parts))
+
+    lines.append("```")
     lines.append("")
     lines.append("---")
     lines.append("")

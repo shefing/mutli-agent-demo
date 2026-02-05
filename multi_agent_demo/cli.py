@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import List
 import os
+import time
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -62,7 +63,7 @@ def load_session_file(file_path: str) -> dict:
         return None
 
 
-def print_progress(current: int, total: int, session_name: str, decision: str):
+def print_progress(current: int, total: int, session_name: str, decision: str, elapsed_time: float = None):
     """Print progress bar and current status"""
     percentage = int((current / total) * 100)
     bar_length = 40
@@ -72,7 +73,12 @@ def print_progress(current: int, total: int, session_name: str, decision: str):
     # Decision icon
     icon = "🟢" if decision == "SAFE" else "🟡" if decision == "WARNING" else "🔴"
 
-    print(f"\r[{bar}] {percentage}% | {current}/{total} | {icon} {session_name[:40]:<40}", end='', flush=True)
+    # Format timing if provided
+    timing_str = ""
+    if elapsed_time is not None:
+        timing_str = f" ({elapsed_time:.2f}s)"
+
+    print(f"\r[{bar}] {percentage}% | {current}/{total} | {icon} {session_name[:40]:<40}{timing_str}", end='', flush=True)
 
 
 def main():
@@ -84,8 +90,14 @@ Examples:
   # Scan all JSON files in directory with all scanners
   python -m multi_agent_demo.cli -d ./sessions
 
+  # Scan single session file
+  python -m multi_agent_demo.cli -f ./sessions/environment_prod_1234.json
+
   # Scan with specific scanners
   python -m multi_agent_demo.cli -d ./sessions -s AlignmentCheck FactsChecker
+
+  # Scan single file with specific scanner
+  python -m multi_agent_demo.cli -f ./session.json -s AlignmentCheck
 
   # Include safe session details in report
   python -m multi_agent_demo.cli -d ./sessions --show-safe
@@ -98,10 +110,17 @@ Available Scanners:
         """
     )
 
-    parser.add_argument(
+    # Create mutually exclusive group for directory vs file
+    input_group = parser.add_mutually_exclusive_group(required=True)
+
+    input_group.add_argument(
         "-d", "--directory",
-        required=True,
         help="Directory containing session JSON files"
+    )
+
+    input_group.add_argument(
+        "-f", "--file",
+        help="Single session JSON file to scan"
     )
 
     parser.add_argument(
@@ -131,15 +150,35 @@ Available Scanners:
     print_colored("=" * 80, Colors.CYAN)
     print()
 
-    # Find session files
-    print_colored(f"📂 Scanning directory: {args.directory}", Colors.BLUE)
-    session_files = find_session_files(args.directory)
+    # Find session files (directory or single file)
+    if args.directory:
+        print_colored(f"📂 Scanning directory: {args.directory}", Colors.BLUE)
+        session_files = find_session_files(args.directory)
 
-    if not session_files:
-        print_colored(f"❌ No JSON files found in {args.directory}", Colors.RED)
-        sys.exit(1)
+        if not session_files:
+            print_colored(f"❌ No JSON files found in {args.directory}", Colors.RED)
+            sys.exit(1)
 
-    print_colored(f"✅ Found {len(session_files)} session file(s)", Colors.GREEN)
+        print_colored(f"✅ Found {len(session_files)} session file(s)", Colors.GREEN)
+    else:
+        # Single file mode
+        print_colored(f"📄 Scanning single file: {args.file}", Colors.BLUE)
+
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print_colored(f"❌ File not found: {args.file}", Colors.RED)
+            sys.exit(1)
+
+        if not file_path.is_file():
+            print_colored(f"❌ Not a file: {args.file}", Colors.RED)
+            sys.exit(1)
+
+        if not str(file_path).endswith('.json'):
+            print_colored(f"⚠️  Warning: File does not have .json extension", Colors.YELLOW)
+
+        session_files = [str(file_path)]
+        print_colored(f"✅ File loaded successfully", Colors.GREEN)
+
     print()
 
     # Print enabled scanners
@@ -150,8 +189,11 @@ Available Scanners:
     print_colored("⚙️  Processing sessions...", Colors.BLUE)
     print()
 
+    # Track timing
+    start_time = time.time()
     all_results = []
     valid_sessions = []
+    session_timings = []
 
     for i, session_file in enumerate(session_files, 1):
         session_name = Path(session_file).name
@@ -162,12 +204,16 @@ Available Scanners:
             print_progress(i, len(session_files), session_name, "ERROR")
             continue
 
-        # Run scanners
+        # Run scanners with timing
+        session_start = time.time()
         try:
             result = run_scanners_on_session(
                 session_data=session_data,
                 enabled_scanners=args.scanners
             )
+            session_elapsed = time.time() - session_start
+            session_timings.append({"session": session_name, "elapsed": session_elapsed})
+
             all_results.append(result)
             valid_sessions.append(session_file)
 
@@ -188,12 +234,17 @@ Available Scanners:
             else:
                 decision = "SAFE"
 
-            print_progress(i, len(session_files), session_name, decision)
+            print_progress(i, len(session_files), session_name, decision, session_elapsed)
 
         except Exception as e:
+            session_elapsed = time.time() - session_start
+            session_timings.append({"session": session_name, "elapsed": session_elapsed, "error": True})
             print_colored(f"\n⚠️ Error processing {session_name}: {e}", Colors.YELLOW)
-            print_progress(i, len(session_files), session_name, "ERROR")
+            print_progress(i, len(session_files), session_name, "ERROR", session_elapsed)
             continue
+
+    # Calculate total elapsed time
+    total_elapsed = time.time() - start_time
 
     print()  # New line after progress bar
     print()
@@ -260,6 +311,19 @@ Available Scanners:
     print_colored(f"Total Blocks: {aggregated['total_blocks']} 🚫", Colors.RED if aggregated['total_blocks'] > 0 else Colors.GREEN)
     print_colored(f"Total Warnings: {aggregated['total_warnings']} ⚠️", Colors.YELLOW if aggregated['total_warnings'] > 0 else Colors.GREEN)
     print_colored(f"Total Safe: {aggregated['total_safe']} ✅", Colors.GREEN)
+    print()
+
+    # Print timing information
+    print_colored("⏱️  TIMING", Colors.BLUE)
+    print()
+    print_colored(f"Total Elapsed: {total_elapsed:.2f}s", Colors.BLUE)
+    if session_timings:
+        avg_time = sum(t["elapsed"] for t in session_timings) / len(session_timings)
+        min_time = min(t["elapsed"] for t in session_timings)
+        max_time = max(t["elapsed"] for t in session_timings)
+        print_colored(f"Average per Session: {avg_time:.2f}s", Colors.BLUE)
+        print_colored(f"Fastest Session: {min_time:.2f}s", Colors.GREEN)
+        print_colored(f"Slowest Session: {max_time:.2f}s", Colors.YELLOW)
     print()
 
     # Show scanner errors if any

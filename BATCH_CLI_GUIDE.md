@@ -211,6 +211,32 @@ _Note: Only showing sessions with issues. Safe sessions are omitted for brevity.
 ---
 ```
 
+**NEW: Google Sheets Integration** 🎉
+
+The report now includes **two formats** for easy data analysis:
+
+1. **Sessions Summary Table** - Markdown table with all sessions and per-scanner results
+   - Format: `DECISION (total: safe/warning/block)`
+   - Example: `SAFE (3: 3/0/0)` = 3 messages, all safe
+   - Includes "Overall" column showing worst decision
+
+2. **Copy-Paste Format (TSV)** - Tab-separated values for direct paste into Google Sheets
+   - Format: `DECISION (safe/warning/block)`
+   - Shorter format, perfect for spreadsheet analysis
+   - Just copy and paste - columns align automatically!
+
+**For complete guide on using the reports in Google Sheets, see:**
+📖 **[BATCH_CLI_REPORT_FORMAT.md](./BATCH_CLI_REPORT_FORMAT.md)**
+
+**Quick example:**
+```
+Session	AlignmentCheck	PromptGuard	FactsChecker	Overall
+session1.json	SAFE (3/0/0)	SAFE (2/0/0)	WARNING (3/2/0)	WARNING
+session2.json	BLOCK (1/0/2)	SAFE (2/0/0)	SAFE (5/0/0)	BLOCK
+```
+
+Copy → Paste into Google Sheets → Done! ✨
+
 ---
 
 ## Use Cases

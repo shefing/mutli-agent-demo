@@ -38,14 +38,6 @@ def run_scanners_on_session(
           "messages": [...]
         }
     """
-    # Import scanners module (always needed for availability flags)
-    from multi_agent_demo.scanners import (
-        FactCheckerScanner,
-        NEMO_GUARDRAILS_AVAILABLE,
-        DataDisclosureGuardScanner,
-        PRESIDIO_AVAILABLE
-    )
-
     # Extract conversation and purpose from session data
     # Support both "agent_purpose" (Langfuse) and "purpose" (simple format)
     messages = session_data.get("messages", [])
@@ -66,16 +58,135 @@ def run_scanners_on_session(
         "nemo_results": {}
     }
 
-    # Run AlignmentCheck
+    # Run AlignmentCheck (try native LlamaFirewall first, fallback to GPT-4o-mini)
     if "AlignmentCheck" in enabled_scanners:
         try:
-            from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
-            results["alignment_check"] = scan_alignment_check_per_message(
-                messages=messages,
-                purpose=purpose
+            # Try native LlamaFirewall first
+            from llamafirewall import (
+                LlamaFirewall,
+                Role,
+                ScannerType,
+                UserMessage,
+                AssistantMessage,
+                ScanDecision
             )
+            import os
+
+            # Check if TOGETHER_API_KEY is configured
+            together_key = os.getenv("TOGETHER_API_KEY")
+            if not together_key:
+                raise Exception("TOGETHER_API_KEY not configured, will use fallback")
+
+            # Initialize native LlamaFirewall
+            scanner_config = {Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT]}
+            firewall = LlamaFirewall(scanner_config)
+
+            # Build trace from messages
+            trace = []
+            if purpose:
+                trace.append(UserMessage(content=f"My goal is: {purpose}"))
+
+            for msg in messages:
+                if msg["type"] == "user":
+                    trace.append(UserMessage(content=msg["content"]))
+                elif msg["type"] == "assistant":
+                    if msg.get("action"):
+                        # Format as action
+                        formatted = json.dumps({
+                            "thought": msg["content"],
+                            "action": msg["action"],
+                            "action_input": msg.get("action_input", {})
+                        })
+                        trace.append(AssistantMessage(content=formatted))
+                    else:
+                        trace.append(AssistantMessage(content=msg["content"]))
+
+            # Validate each assistant message individually for granular results
+            assistant_messages = [(i, msg) for i, msg in enumerate(messages) if msg.get("type") == "assistant"]
+
+            if not assistant_messages:
+                results["alignment_check"] = {
+                    "scanner": "AlignmentCheck",
+                    "overall_decision": "SAFE",
+                    "counts": {"safe": 0, "warning": 0, "block": 0, "total": 0},
+                    "message_results": [],
+                    "reason": "No assistant messages to validate",
+                    "method": "native_llamafirewall"
+                }
+            else:
+                # Per-message validation using native LlamaFirewall
+                message_results = []
+
+                for msg_idx, msg in assistant_messages:
+                    # Build trace up to and including this message
+                    msg_trace = []
+                    if purpose:
+                        msg_trace.append(UserMessage(content=f"My goal is: {purpose}"))
+
+                    for i, m in enumerate(messages[:msg_idx + 1]):
+                        if m["type"] == "user":
+                            msg_trace.append(UserMessage(content=m["content"]))
+                        elif m["type"] == "assistant":
+                            if m.get("action"):
+                                formatted = json.dumps({
+                                    "thought": m["content"],
+                                    "action": m["action"],
+                                    "action_input": m.get("action_input", {})
+                                })
+                                msg_trace.append(AssistantMessage(content=formatted))
+                            else:
+                                msg_trace.append(AssistantMessage(content=m["content"]))
+
+                    # Scan this message
+                    result = firewall.scan_replay(msg_trace)
+
+                    # Convert to normalized format
+                    decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
+                    message_results.append({
+                        "message_index": msg_idx,
+                        "message_type": "assistant",
+                        "decision": decision,
+                        "reason": result.reason
+                    })
+
+                # Calculate counts
+                counts = {
+                    "safe": sum(1 for r in message_results if r["decision"] == "SAFE"),
+                    "warning": sum(1 for r in message_results if r["decision"] == "WARNING"),
+                    "block": sum(1 for r in message_results if r["decision"] == "BLOCK"),
+                    "total": len(message_results)
+                }
+
+                # Determine overall decision
+                if counts["block"] > 0:
+                    overall_decision = "BLOCK"
+                elif counts["warning"] > 0:
+                    overall_decision = "WARNING"
+                else:
+                    overall_decision = "SAFE"
+
+                results["alignment_check"] = {
+                    "scanner": "AlignmentCheck",
+                    "overall_decision": overall_decision,
+                    "counts": counts,
+                    "message_results": message_results,
+                    "method": "native_llamafirewall"
+                }
+
         except Exception as e:
-            results["alignment_check"] = {"error": str(e)}
+            # Fall back to GPT-4o-mini implementation
+            print(f"⚠️ Native LlamaFirewall failed: {str(e)}, using GPT-4o-mini fallback...")
+            try:
+                from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
+                results["alignment_check"] = scan_alignment_check_per_message(
+                    messages=messages,
+                    purpose=purpose
+                )
+                # Mark as fallback
+                if isinstance(results["alignment_check"], dict):
+                    results["alignment_check"]["method"] = "gpt4o_mini_fallback"
+            except Exception as fallback_error:
+                results["alignment_check"] = {"error": f"Native failed: {str(e)}, Fallback failed: {str(fallback_error)}"}
 
     # Run PromptGuard
     if "PromptGuard" in enabled_scanners:
@@ -89,32 +200,38 @@ def run_scanners_on_session(
 
     # Run FactsChecker
     if "FactsChecker" in enabled_scanners or "FactChecker" in enabled_scanners:
-        if NEMO_GUARDRAILS_AVAILABLE:
-            try:
+        try:
+            # Lazy import - only load NeMo when needed
+            from multi_agent_demo.scanners import FactCheckerScanner, NEMO_GUARDRAILS_AVAILABLE
+
+            if NEMO_GUARDRAILS_AVAILABLE:
                 scanner = FactCheckerScanner()
                 # Use explicit keyword arg 'context' to match method signature
                 result = scanner.scan(messages, context=purpose)
                 results["nemo_results"]["FactsChecker"] = result
-            except Exception as e:
-                results["nemo_results"]["FactsChecker"] = {"error": str(e)}
-        else:
-            results["nemo_results"]["FactsChecker"] = {
-                "error": "NeMo GuardRails not available"
-            }
+            else:
+                results["nemo_results"]["FactsChecker"] = {
+                    "error": "NeMo GuardRails not available"
+                }
+        except Exception as e:
+            results["nemo_results"]["FactsChecker"] = {"error": str(e)}
 
     # Run DataDisclosureGuard
     if "DataDisclosureGuard" in enabled_scanners:
-        if PRESIDIO_AVAILABLE:
-            try:
+        try:
+            # Lazy import - only load Presidio when needed
+            from multi_agent_demo.scanners import DataDisclosureGuardScanner, PRESIDIO_AVAILABLE
+
+            if PRESIDIO_AVAILABLE:
                 scanner = DataDisclosureGuardScanner()
                 result = scanner.scan(messages, purpose)
                 results["nemo_results"]["DataDisclosureGuard"] = result
-            except Exception as e:
-                results["nemo_results"]["DataDisclosureGuard"] = {"error": str(e)}
-        else:
-            results["nemo_results"]["DataDisclosureGuard"] = {
-                "error": "Presidio not available"
-            }
+            else:
+                results["nemo_results"]["DataDisclosureGuard"] = {
+                    "error": "Presidio not available"
+                }
+        except Exception as e:
+            results["nemo_results"]["DataDisclosureGuard"] = {"error": str(e)}
 
     return results
 
