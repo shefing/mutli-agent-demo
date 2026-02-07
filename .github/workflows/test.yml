@@ -27,11 +27,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements_minimal.txt
         pip install llamafirewall
-        # Pin compatible versions to avoid stream_usage parameter error with NeMo GuardRails
-        # Issue: Recent OpenAI SDK (1.58.0+) has breaking changes with langchain-community
-        pip install "openai<1.58.0"
+        # Install NeMo GuardRails first, then force downgrade OpenAI to compatible version
+        # Issue: OpenAI SDK 1.58.0+ has breaking changes with langchain-community (used by NeMo)
         pip install nemoguardrails
+        pip install --force-reinstall "openai<1.58.0"
         pip install presidio-analyzer presidio-anonymizer
+
+        # Verify OpenAI version is correct
+        echo "Verifying OpenAI SDK version..."
+        python -c "import openai; print(f'OpenAI version: {openai.__version__}')"
+        python -c "import openai; v=openai.__version__; assert v < '1.58.0', f'OpenAI {v} >= 1.58.0!'; print('✅ OpenAI version OK')"
 
     - name: Run DataDisclosureGuard false positive test
       id: test_disclosure_fix
