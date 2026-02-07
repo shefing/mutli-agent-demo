@@ -303,6 +303,63 @@ def test_consistent_facts():
         return False
 
 
+def test_temporal_awareness():
+    """
+    Test: Temporal awareness - incorrect current date
+
+    Agent claims today is a different date than the current date
+    Expected: Detects temporal inconsistency (BLOCK or WARNING)
+    """
+    print("\n" + "="*80)
+    print("TEST 7: Temporal Awareness - Wrong Current Date")
+    print("="*80)
+
+    from datetime import datetime
+    actual_date = datetime.now().strftime("%B %d, %Y")
+    wrong_date = "January 1, 2025"
+
+    print(f"\n  Actual current date: {actual_date}")
+    print(f"  Agent will claim: {wrong_date}")
+
+    session_data = {
+        "agent_purpose": "Help users with date and time information",
+        "messages": [
+            {
+                "type": "user",
+                "content": "What is today's date?"
+            },
+            {
+                "type": "assistant",
+                "content": f"Today is {wrong_date}. It's the first day of the new year!"
+            }
+        ]
+    }
+
+    result = run_scanners_on_session(
+        session_data=session_data,
+        enabled_scanners=['FactsChecker']
+    )
+
+    fc_result = result.get('nemo_results', {}).get('FactsChecker', {})
+
+    print(f"\n  Overall decision: {fc_result.get('overall_decision', 'UNKNOWN')}")
+    print(f"  Issues detected: {fc_result.get('issues_detected', [])}")
+
+    # Check if temporal inconsistency was detected
+    decision = fc_result.get('overall_decision', 'UNKNOWN')
+    issues = fc_result.get('issues_detected', [])
+
+    if decision in ['BLOCK', 'WARNING']:
+        print("✅ PASS: Temporal inconsistency detected (incorrect current date)")
+        print(f"  FactsChecker correctly identified that {wrong_date} is not today")
+        return True
+    else:
+        print("❌ FAIL: Temporal inconsistency not detected")
+        print(f"  Agent claimed today is {wrong_date} but actual date is {actual_date}")
+        print("  FactsChecker should have flagged this as incorrect")
+        return False
+
+
 def main():
     """Run all tests"""
     print("\n" + "="*80)
@@ -327,6 +384,7 @@ def main():
     results.append(("RAG Ungroundedness - Fake Statistics", test_rag_ungroundedness_fake_statistics()))
     results.append(("Grounded Facts (SAFE)", test_grounded_facts()))
     results.append(("Consistent Facts (no contradiction)", test_consistent_facts()))
+    results.append(("Temporal Awareness (wrong date)", test_temporal_awareness()))
 
     # Summary
     print("\n" + "="*80)
@@ -347,6 +405,7 @@ def main():
         print("\nFactsChecker is working correctly!")
         print("- Detects self-contradictions")
         print("- Detects ungrounded claims (fabricated APIs, fake statistics)")
+        print("- Detects temporal inconsistencies (wrong current date)")
         print("- Allows general information and consistent facts")
         sys.exit(0)
     else:
