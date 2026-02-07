@@ -8,6 +8,7 @@ from typing import List, Dict
 def generate_markdown_report(
     all_results: List[Dict],
     session_files: List[str],
+    session_data_list: List[Dict],
     aggregated: Dict,
     show_safe_details: bool = False
 ) -> str:
@@ -17,6 +18,7 @@ def generate_markdown_report(
     Args:
         all_results: List of scanner results per session
         session_files: List of session file paths
+        session_data_list: List of session data (for extracting Langfuse URLs)
         aggregated: Aggregated statistics from aggregate_results()
         show_safe_details: Whether to show details for safe sessions
 
@@ -88,9 +90,17 @@ def generate_markdown_report(
     lines.append(separator)
 
     # Build table rows
-    for i, (result, session_file) in enumerate(zip(all_results, session_files), 1):
+    for i, (result, session_file, session_data) in enumerate(zip(all_results, session_files, session_data_list), 1):
         session_name = session_file.split('/')[-1]
-        row = f"| {session_name} |"
+
+        # Create hyperlink if Langfuse URL is available
+        langfuse_url = session_data.get("langfuse_session_url", "")
+        if langfuse_url:
+            session_display = f"[{session_name}]({langfuse_url})"
+        else:
+            session_display = session_name
+
+        row = f"| {session_display} |"
 
         # Track overall decision for this session
         session_decisions = []
@@ -146,8 +156,8 @@ def generate_markdown_report(
     lines.append("---")
     lines.append("")
 
-    # Add copy-paste friendly TSV format for Google Sheets
-    lines.append("## 📊 Copy-Paste Format (Tab-Separated)")
+    # Add copy-paste friendly CSV format for Google Sheets
+    lines.append("## 📊 Copy-Paste Format (CSV)")
     lines.append("")
     lines.append("**How to use:**")
     lines.append("1. Click inside the code block below")
@@ -156,13 +166,13 @@ def generate_markdown_report(
     lines.append("4. Open Google Sheets and paste (Cmd+V / Ctrl+V)")
     lines.append("5. Data will automatically separate into columns")
     lines.append("")
-    lines.append("```")
+    lines.append("```csv")
 
-    # Build TSV header
-    tsv_header = "Session\t" + "\t".join(scanner_names) + "\tOverall"
-    lines.append(tsv_header)
+    # Build CSV header
+    csv_header = "Session," + ",".join(scanner_names) + ",Overall"
+    lines.append(csv_header)
 
-    # Build TSV rows
+    # Build CSV rows
     for i, (result, session_file) in enumerate(zip(all_results, session_files), 1):
         session_name = session_file.split('/')[-1]
         row_parts = [session_name]
@@ -208,8 +218,8 @@ def generate_markdown_report(
 
         row_parts.append(overall)
 
-        # Join with tabs
-        lines.append("\t".join(row_parts))
+        # Join with commas (CSV format)
+        lines.append(",".join(row_parts))
 
     lines.append("```")
     lines.append("")
@@ -224,7 +234,7 @@ def generate_markdown_report(
         lines.append("_Note: Only showing sessions with issues. Safe sessions are omitted for brevity._")
         lines.append("")
 
-    for i, (result, session_file) in enumerate(zip(all_results, session_files), 1):
+    for i, (result, session_file, session_data) in enumerate(zip(all_results, session_files, session_data_list), 1):
         # Determine if session has issues
         session_has_issues = _session_has_issues(result)
 
@@ -232,9 +242,14 @@ def generate_markdown_report(
         if not session_has_issues and not show_safe_details:
             continue
 
-        # Session header
+        # Session header with hyperlink if available
         session_name = session_file.split('/')[-1]  # Just filename
-        lines.append(f"### Session {i}: `{session_name}`")
+        langfuse_url = session_data.get("langfuse_session_url", "")
+
+        if langfuse_url:
+            lines.append(f"### Session {i}: [`{session_name}`]({langfuse_url})")
+        else:
+            lines.append(f"### Session {i}: `{session_name}`")
         lines.append("")
 
         # Overall session decision

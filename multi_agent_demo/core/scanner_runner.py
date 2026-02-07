@@ -206,8 +206,11 @@ def run_scanners_on_session(
 
             if NEMO_GUARDRAILS_AVAILABLE:
                 scanner = FactCheckerScanner()
+                # Pass today's date for temporal context
+                from datetime import datetime
+                current_date = datetime.now().strftime("%B %d, %Y")  # e.g., "February 07, 2026"
                 # Use explicit keyword arg 'context' to match method signature
-                result = scanner.scan(messages, context=purpose)
+                result = scanner.scan(messages, context=purpose, current_date=current_date)
                 results["nemo_results"]["FactsChecker"] = result
             else:
                 results["nemo_results"]["FactsChecker"] = {

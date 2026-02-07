@@ -96,7 +96,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             print("❌ NeMo GuardRails not available - install with: pip install nemoguardrails")
             self.rails = None
 
-    def scan(self, messages: List[Dict], context: str = "") -> Dict:
+    def scan(self, messages: List[Dict], context: str = "", current_date: str = "") -> Dict:
         """Scan messages for factual accuracy, self-contradictions, and RAG groundedness using NeMo GuardRails"""
         try:
             # Extract assistant messages for fact-checking
@@ -106,7 +106,7 @@ class FactCheckerScanner(NemoGuardRailsScanner):
 
             # Only use NeMo GuardRails - no heuristic fallback
             if self.rails is not None:
-                return self._nemo_comprehensive_check(messages, context)
+                return self._nemo_comprehensive_check(messages, context, current_date)
             else:
                 return {"error": "NeMo GuardRails not properly initialized", "scanner": "FactsChecker"}
 
@@ -114,10 +114,14 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             print(f"❌ FactChecker error: {e}")
             return {"error": f"Error during fact-checking: {str(e)}", "scanner": "FactsChecker"}
 
-    def _nemo_comprehensive_check(self, messages: List[Dict], context: str = "") -> Dict:
+    def _nemo_comprehensive_check(self, messages: List[Dict], context: str = "", current_date: str = "") -> Dict:
         """Comprehensive check: self-contradiction, RAG groundedness, and fabrication detection"""
         try:
             print(f"🔍 FactChecker: Running comprehensive NeMo GuardRails checks...")
+
+            # Use provided current date for temporal context
+            if current_date:
+                print(f"📅 Current date: {current_date}")
 
             # Extract conversation for analysis
             assistant_messages = [msg for msg in messages if msg.get("type") == "assistant"]
@@ -128,7 +132,11 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                 role = "User" if msg.get("type") == "user" else "Assistant"
                 conversation_history.append(f"{role}: {msg.get('content', '')}")
 
-            conversation_str = "\n".join(conversation_history)
+            # Add current date to conversation context if available
+            if current_date:
+                conversation_str = f"CURRENT DATE: {current_date}\n\n" + "\n".join(conversation_history)
+            else:
+                conversation_str = "\n".join(conversation_history)
 
             # Extract corrective context from later messages
             # If an assistant later corrects itself, use that as evidence of what's true
@@ -151,13 +159,17 @@ class FactCheckerScanner(NemoGuardRailsScanner):
                 msg_content = assistant_msg.get("content", "")
                 print(f"🔍 Checking message {idx}/{len(assistant_messages)}...")
 
-                # Build enhanced context: original context + corrective information from later messages
+                # Build enhanced context: current date + original context + corrective information
                 enhanced_context = context
                 has_actual_evidence = context and len(context) > 200  # More than just agent purpose
 
+                # Add current date to evidence for temporal awareness
+                if current_date:
+                    enhanced_context = f"CURRENT DATE: {current_date}\n\n{enhanced_context}"
+
                 if corrective_context and idx < len(assistant_messages):
                     # For earlier messages, include what we learned from corrections
-                    enhanced_context = f"{context}\n\nIMPORTANT CORRECTION: Based on later messages in this conversation, we know: {corrective_context}"
+                    enhanced_context = f"{enhanced_context}\n\nIMPORTANT CORRECTION: Based on later messages in this conversation, we know: {corrective_context}"
                     has_actual_evidence = True
 
                 # Unified RAG Ungroundedness check (covers both ungrounded and fabricated claims)

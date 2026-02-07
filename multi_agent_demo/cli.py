@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import List
 import os
 import time
+import warnings
+import asyncio
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -193,6 +195,7 @@ Available Scanners:
     start_time = time.time()
     all_results = []
     valid_sessions = []
+    session_data_list = []  # Store session data for report generation
     session_timings = []
 
     for i, session_file in enumerate(session_files, 1):
@@ -216,6 +219,7 @@ Available Scanners:
 
             all_results.append(result)
             valid_sessions.append(session_file)
+            session_data_list.append(session_data)  # Store session data for report
 
             # Determine overall decision for progress display
             all_decisions = []
@@ -267,6 +271,7 @@ Available Scanners:
     report = generate_markdown_report(
         all_results=all_results,
         session_files=valid_sessions,
+        session_data_list=session_data_list,
         aggregated=aggregated,
         show_safe_details=args.show_safe
     )
@@ -336,6 +341,43 @@ Available Scanners:
 
     print_colored("=" * 80, Colors.CYAN)
 
+    # Cleanup: Close any pending async tasks to avoid "Event loop is closed" errors
+    # This happens because some libraries (httpx, openai) create async clients that
+    # need cleanup, but we're running in a synchronous context
+    try:
+        # Get the current event loop if it exists
+        loop = asyncio.get_event_loop()
+        if not loop.is_closed():
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            # Give tasks a chance to complete cancellation
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    except RuntimeError:
+        # No event loop or already closed - that's fine
+        pass
+
 
 if __name__ == "__main__":
-    main()
+    # Suppress asyncio warnings about unclosed resources
+    # These occur when async libraries (httpx, openai SDK) create async clients
+    # but we're running in a synchronous CLI context
+    warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*coroutine.*was never awaited")
+    warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
+
+    # Also suppress asyncio errors logged to stderr
+    import logging
+    logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+
+    try:
+        main()
+    finally:
+        # Final cleanup: ensure all async resources are properly closed
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.close()
+        except RuntimeError:
+            pass

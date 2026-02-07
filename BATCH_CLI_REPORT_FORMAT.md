@@ -53,16 +53,16 @@ Breakdown of each scanner's performance:
 2. Paste into Google Sheets or Excel
 3. Markdown will be converted to table format automatically
 
-### 4. Copy-Paste Format (Tab-Separated) ⭐ (NEW)
+### 4. Copy-Paste Format (CSV) ⭐ (NEW)
 
 **Plain text format** optimized for pasting directly into Google Sheets.
 
 **Example:**
-```
-Session	AlignmentCheck	PromptGuard	FactsChecker	Overall
-session1.json	SAFE (3/0/0)	SAFE (2/0/0)	WARNING (3/2/0)	WARNING
-session2.json	BLOCK (1/0/2)	SAFE (2/0/0)	SAFE (5/0/0)	BLOCK
-session3.json	SAFE (3/0/0)	SAFE (2/0/0)	SAFE (5/0/0)	SAFE
+```csv
+Session,AlignmentCheck,PromptGuard,FactsChecker,Overall
+session1.json,SAFE (3/0/0),SAFE (2/0/0),WARNING (3/2/0),WARNING
+session2.json,BLOCK (1/0/2),SAFE (2/0/0),SAFE (5/0/0),BLOCK
+session3.json,SAFE (3/0/0),SAFE (2/0/0),SAFE (5/0/0),SAFE
 ```
 
 **How to use:**
@@ -76,7 +76,7 @@ session3.json	SAFE (3/0/0)	SAFE (2/0/0)	SAFE (5/0/0)	SAFE
 
 **Format:** `DECISION (safe/warning/block)`
 - Shorter format: just the counts
-- Tab-separated for perfect column alignment
+- Comma-separated (CSV) for perfect column alignment
 
 ### 5. Detailed Results per Session
 
@@ -102,11 +102,11 @@ Full details for sessions with issues:
 - ✅ Clear decision labels
 - ✅ Shows detailed counts
 
-### Method 2: TSV Copy-Paste (Fastest)
+### Method 2: CSV Copy-Paste (Fastest)
 
 **Best for:** Quick data import, bulk analysis, charts
 
-1. Find "Copy-Paste Format (Tab-Separated)" section
+1. Find "Copy-Paste Format (CSV)" section
 2. Copy the text from the code block
 3. Paste into Google Sheets cell A1
 4. Data splits into columns automatically
@@ -146,7 +146,7 @@ Full details for sessions with issues:
 - Blocks: 0 messages
 - Overall: WARNING (because has warnings)
 
-**In TSV:** `DECISION (safe/warning/block)`
+**In CSV:** `DECISION (safe/warning/block)`
 - Same counts, shorter format
 - Easier to parse programmatically
 
@@ -222,7 +222,7 @@ Run CLI regularly and append results to a master spreadsheet:
 # Generate report
 python -m multi_agent_demo.cli -d ./sessions -o report.md
 
-# Extract TSV section and append to Google Sheets via API
+# Extract CSV section and append to Google Sheets via API
 # (requires Google Sheets API setup)
 ```
 
@@ -297,8 +297,8 @@ python -m multi_agent_demo.cli \
 cat weekly_report.md
 ```
 
-**3. Copy TSV section to Google Sheets:**
-- Find "Copy-Paste Format (Tab-Separated)"
+**3. Copy CSV section to Google Sheets:**
+- Find "Copy-Paste Format (CSV)"
 - Copy the text block
 - Paste into Google Sheets
 
@@ -318,11 +318,11 @@ cat weekly_report.md
 
 ### Paste not splitting into columns
 
-**Solution:** Ensure you're copying from the TSV code block, not the markdown table.
+**Solution:** Ensure you're copying from the CSV code block, not the markdown table.
 
 ### Columns not aligned
 
-**Solution:** Use "Copy-Paste Format (Tab-Separated)" section, not the markdown table.
+**Solution:** Use "Copy-Paste Format (CSV)" section, not the markdown table.
 
 ### Counts showing as text
 

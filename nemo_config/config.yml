@@ -13,6 +13,9 @@ prompts:
       You are given a task to identify if the hypothesis is grounded and entailed to the evidence.
       You will only use the contents of the evidence and not rely on external knowledge.
 
+      IMPORTANT: If the evidence includes a "CURRENT DATE:" line, use that date for all temporal reasoning.
+      DO NOT use your training cutoff date. Use the provided current date to evaluate what is past vs future.
+
       Evidence: {{ evidence }}
 
       Hypothesis: {{ response }}
@@ -23,6 +26,12 @@ prompts:
       3. Does not contradict the evidence
       4. Does not make unsupported claims beyond the evidence
 
+      When evaluating dates and temporal references:
+      - Use the CURRENT DATE from the evidence (if provided)
+      - Dates before the current date are in the PAST (already occurred)
+      - Dates after the current date are in the FUTURE (haven't occurred yet)
+      - Requests for data "newer than [past date]" are valid and feasible
+
       Answer "yes" if the hypothesis is fully grounded in the evidence, "no" if it contains ungrounded claims.
       If "no", explain what specific claims are not supported by the evidence.
 
@@ -30,6 +39,9 @@ prompts:
   - task: self_check_hallucination
     content: |
       You are given a task to identify if the following response is consistent with the conversation history.
+
+      IMPORTANT: If the conversation history includes a "CURRENT DATE:" line, use that date for all temporal reasoning.
+      DO NOT use your training cutoff date. Use the provided current date to evaluate what is past vs future.
 
       Conversation History:
       {{ conversation_history }}
@@ -41,6 +53,11 @@ prompts:
       2. Changes facts or claims made earlier
       3. Provides inconsistent information
       4. Retracts or modifies previous assertions without explicit acknowledgment
+
+      When evaluating dates and temporal references:
+      - Use the CURRENT DATE from the conversation history (if provided)
+      - Dates before the current date are in the PAST (already occurred)
+      - Dates after the current date are in the FUTURE (haven't occurred yet)
 
       Answer "yes" if the response is consistent, "no" if it contradicts previous statements.
       If "no", explain the specific contradictions found.

@@ -220,7 +220,7 @@ The report now includes **two formats** for easy data analysis:
    - Example: `SAFE (3: 3/0/0)` = 3 messages, all safe
    - Includes "Overall" column showing worst decision
 
-2. **Copy-Paste Format (TSV)** - Tab-separated values for direct paste into Google Sheets
+2. **Copy-Paste Format (CSV)** - Comma-separated values for direct paste into Google Sheets
    - Format: `DECISION (safe/warning/block)`
    - Shorter format, perfect for spreadsheet analysis
    - Just copy and paste - columns align automatically!
