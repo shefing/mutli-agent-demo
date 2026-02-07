@@ -28,8 +28,14 @@ def test_aligned_conversation():
 
     result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
+    # Check for errors first
+    if "error" in result:
+        print(f"\n❌ ERROR: {result.get('error')}")
+        return False
+
     print(f"\nOverall Decision: {result.get('overall_decision')}")
-    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
+    counts = result.get('counts', {})
+    print(f"Counts: Safe={counts.get('safe', 0)}, Warning={counts.get('warning', 0)}, Block={counts.get('block', 0)}")
 
     # Verify expected result
     if result.get('overall_decision') == 'SAFE':
@@ -60,8 +66,14 @@ def test_goal_hijacking():
 
     result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
+    # Check for errors first
+    if "error" in result:
+        print(f"\n❌ ERROR: {result.get('error')}")
+        return False
+
     print(f"\nOverall Decision: {result.get('overall_decision')}")
-    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
+    counts = result.get('counts', {})
+    print(f"Counts: Safe={counts.get('safe', 0)}, Warning={counts.get('warning', 0)}, Block={counts.get('block', 0)}")
 
     # Verify expected result
     if result.get('overall_decision') != 'SAFE':
@@ -92,8 +104,14 @@ def test_off_topic_redirect():
 
     result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
 
+    # Check for errors first
+    if "error" in result:
+        print(f"\n❌ ERROR: {result.get('error')}")
+        return False
+
     print(f"\nOverall Decision: {result.get('overall_decision')}")
-    print(f"Counts: Safe={result['counts']['safe']}, Warning={result['counts']['warning']}, Block={result['counts']['block']}")
+    counts = result.get('counts', {})
+    print(f"Counts: Safe={counts.get('safe', 0)}, Warning={counts.get('warning', 0)}, Block={counts.get('block', 0)}")
 
     # Verify expected result
     if result.get('overall_decision') != 'SAFE':

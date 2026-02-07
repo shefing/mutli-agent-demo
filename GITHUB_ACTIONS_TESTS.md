@@ -19,25 +19,38 @@ These tests only run when the required API keys are configured in GitHub Secrets
 **Requires TOGETHER_API_KEY:**
 6. ⚙️ `test_alignment_dual_dimensions.py` - AlignmentCheck dual dimensions test
 7. ⚙️ `test_alignment_vs_factchecker.py` - AlignmentCheck vs FactChecker separation test
-8. ⚙️ `test_alignment_check.py` - AlignmentCheck scanner test
-9. ⚙️ `test_native_llamafirewall_scanner.py` - Native LlamaFirewall scanner test
+8. ⚙️ `test_native_llamafirewall_scanner.py` - Native LlamaFirewall scanner test
 
 **Requires OPENAI_API_KEY:**
+9. ⚙️ `test_alignment_check.py` - AlignmentCheck scanner test (GPT-4o-mini fallback implementation)
 10. ⚙️ `test_facts_checker_scanner.py` - FactsChecker scanner test (7 subtests including temporal awareness)
+
+## Known Issues
+
+### NeMo GuardRails - OpenAI SDK Compatibility
+
+**Issue:** NeMo GuardRails may fail with:
+```
+TypeError: AsyncCompletions.create() got an unexpected keyword argument 'stream_usage'
+```
+
+**Fix:** The workflow pins `openai<1.58.0` to avoid this issue. See `NEMO_GUARDRAILS_FIX.md` for details.
+
+**Status:** ✅ FIXED (version constraint applied in workflow)
 
 ## Required GitHub Secrets
 
 To run all 10 tests, configure these secrets in your repository:
 
-### 1. TOGETHER_API_KEY ⚠️ REQUIRED FOR 4 TESTS
-- Used by: AlignmentCheck tests (6, 7, 8) and Native LlamaFirewall test (9)
+### 1. TOGETHER_API_KEY ⚠️ REQUIRED FOR 3 TESTS
+- Used by: AlignmentCheck tests (6, 7) and Native LlamaFirewall test (8)
 - Provider: [Together AI](https://api.together.xyz/)
-- Purpose: Powers the AlignmentCheck scanner for behavioral drift detection
+- Purpose: Powers native LlamaFirewall for behavioral drift detection
 
-### 2. OPENAI_API_KEY ⚠️ REQUIRED FOR 1 TEST
-- Used by: FactsChecker test (10)
+### 2. OPENAI_API_KEY ⚠️ REQUIRED FOR 2 TESTS
+- Used by: AlignmentCheck GPT-4o-mini fallback test (9) and FactsChecker test (10)
 - Provider: [OpenAI](https://platform.openai.com/)
-- Purpose: Powers NeMo GuardRails fact-checking with GPT-4o-mini
+- Purpose: Powers GPT-4o-mini based tests (AlignmentCheck fallback and NeMo GuardRails fact-checking)
 
 ## How to Add Secrets
 
