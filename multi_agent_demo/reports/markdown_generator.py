@@ -360,12 +360,25 @@ def _append_scanner_result(lines: List[str], scanner_name: str, scanner_result: 
                     f"Warnings: {counts.get('warning', 0)} | "
                     f"Blocks: {counts.get('block', 0)}")
 
-    # Reason (if available and not safe)
+    # Top-level reason (if available)
     if scanner_result.get("reason"):
         reason = scanner_result["reason"]
-        # Truncate long reasons
         if len(reason) > 200:
             reason = reason[:200] + "..."
         lines.append(f"  - _Reason:_ {reason}")
+
+    # Per-message details (show non-SAFE messages)
+    message_results = scanner_result.get("message_results", [])
+    flagged = [m for m in message_results if m.get("decision") != "SAFE"]
+    if flagged:
+        lines.append(f"  - **Flagged messages ({len(flagged)}):**")
+        for m in flagged:
+            msg_idx = m.get("message_index", "?")
+            msg_decision = m.get("decision", "?")
+            reason = m.get("reason", "")
+            if len(reason) > 200:
+                reason = reason[:200] + "..."
+            icon = "🔴" if msg_decision == "BLOCK" else "🟡"
+            lines.append(f"    - {icon} Message #{msg_idx}: **{msg_decision}** — {reason}")
 
     lines.append("")
