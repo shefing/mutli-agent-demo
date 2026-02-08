@@ -52,7 +52,7 @@ jobs:
         python -c "import langchain; print(f'✓ langchain: {langchain.__version__}')"
         python -c "import langchain_core; print(f'✓ langchain-core: {langchain_core.__version__}')"
         python -c "import langchain_community; print(f'✓ langchain-community: {langchain_community.__version__}')"
-        python -c "import langchain_openai; print(f'✓ langchain-openai: {langchain_openai.__version__}')"
+        python -c "import langchain_openai; print('✓ langchain-openai: importable')"
         python -c "import httpx; print(f'✓ httpx: {httpx.__version__}')"
         python -c "import tiktoken; print(f'✓ tiktoken: {tiktoken.__version__}')"
         python -c "import openai; assert openai.__version__ < '1.58.0', 'OpenAI version too new!'"
