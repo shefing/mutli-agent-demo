@@ -39,6 +39,7 @@ jobs:
         pip install --force-reinstall --no-deps "langchain-core==0.2.43"
         pip install --force-reinstall --no-deps "langchain-community==0.2.16"
         pip install --force-reinstall --no-deps "langchain-openai==0.1.25"
+        pip install tiktoken
 
         # Pin httpx to avoid breaking LlamaFirewall/OpenAI SDK
         pip install "httpx<0.28.0"
