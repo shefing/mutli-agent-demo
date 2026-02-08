@@ -33,9 +33,11 @@ jobs:
         pip install nemoguardrails presidio-analyzer presidio-anonymizer
 
         # Force compatible langchain and openai versions
-        # OpenAI 1.58.0+ broke langchain-community's stream_usage parameter
-        # langchain-core must stay <0.3.0 (0.3.0 removed pydantic_v1 module needed by langchain-community 0.2.x)
+        # All langchain packages must be from the same 0.2.x era to work together.
+        # nemoguardrails pulls in langchain 1.x which is incompatible with the 0.2.x sub-packages.
+        # We pin every langchain package to known-compatible versions.
         pip install --force-reinstall --no-deps "openai==1.54.0"
+        pip install --force-reinstall --no-deps "langchain==0.2.16"
         pip install --force-reinstall --no-deps "langchain-core==0.2.43"
         pip install --force-reinstall --no-deps "langchain-community==0.2.16"
         pip install --force-reinstall --no-deps "langchain-openai==0.1.25"
@@ -44,14 +46,20 @@ jobs:
         # Pin httpx to avoid breaking LlamaFirewall/OpenAI SDK
         pip install "httpx<0.28.0"
 
-        # Verify versions
+        # Verify versions and compatibility
         echo "Verifying package versions..."
         python -c "import openai; print(f'✓ OpenAI: {openai.__version__}')"
+        python -c "import langchain; print(f'✓ langchain: {langchain.__version__}')"
+        python -c "import langchain_core; print(f'✓ langchain-core: {langchain_core.__version__}')"
         python -c "import langchain_community; print(f'✓ langchain-community: {langchain_community.__version__}')"
+        python -c "import langchain_openai; print(f'✓ langchain-openai: {langchain_openai.__version__}')"
         python -c "import httpx; print(f'✓ httpx: {httpx.__version__}')"
+        python -c "import tiktoken; print(f'✓ tiktoken: {tiktoken.__version__}')"
         python -c "import openai; assert openai.__version__ < '1.58.0', 'OpenAI version too new!'"
         python -c "import nemoguardrails; print('✓ NeMo GuardRails importable')"
         python -c "import llamafirewall; print('✓ LlamaFirewall importable')"
+        # Verify ChatOpenAI can actually be loaded (catches langchain version mismatches)
+        python -c "from langchain_openai import ChatOpenAI; print('✓ ChatOpenAI loadable')"
         echo "✅ All package versions compatible"
 
     - name: Run DataDisclosureGuard false positive test
