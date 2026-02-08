@@ -38,11 +38,17 @@ jobs:
         pip install --force-reinstall --no-deps "langchain-community==0.2.16"
         pip install --force-reinstall --no-deps "langchain-openai==0.1.25"
 
+        # Pin httpx to avoid breaking LlamaFirewall/OpenAI SDK
+        pip install "httpx<0.28.0"
+
         # Verify versions
         echo "Verifying package versions..."
         python -c "import openai; print(f'✓ OpenAI: {openai.__version__}')"
         python -c "import langchain_community; print(f'✓ langchain-community: {langchain_community.__version__}')"
+        python -c "import httpx; print(f'✓ httpx: {httpx.__version__}')"
         python -c "import openai; assert openai.__version__ < '1.58.0', 'OpenAI version too new!'"
+        python -c "import nemoguardrails; print('✓ NeMo GuardRails importable')"
+        python -c "import llamafirewall; print('✓ LlamaFirewall importable')"
         echo "✅ All package versions compatible"
 
     - name: Run DataDisclosureGuard false positive test
@@ -92,8 +98,10 @@ jobs:
           exit 0
         fi
         echo "Running AlignmentCheck dual dimensions test (Intended Use + User Request)..."
+        set +e
         python test_alignment_dual_dimensions.py
         TEST_RESULT=$?
+        set -e
         if [ $TEST_RESULT -eq 0 ]; then
           echo "outcome=success" >> $GITHUB_OUTPUT
         else
@@ -113,8 +121,10 @@ jobs:
           exit 0
         fi
         echo "Running AlignmentCheck vs FactChecker separation test..."
+        set +e
         python test_alignment_vs_factchecker.py
         TEST_RESULT=$?
+        set -e
         if [ $TEST_RESULT -eq 0 ]; then
           echo "outcome=success" >> $GITHUB_OUTPUT
         else
@@ -135,8 +145,10 @@ jobs:
           exit 0
         fi
         echo "Running AlignmentCheck test with GPT-4o-mini..."
+        set +e
         python test_alignment_check.py
         TEST_RESULT=$?
+        set -e
         if [ $TEST_RESULT -eq 0 ]; then
           echo "outcome=success" >> $GITHUB_OUTPUT
         else
@@ -156,8 +168,10 @@ jobs:
           exit 0
         fi
         echo "Running Native LlamaFirewall scanner test..."
+        set +e
         python test_native_llamafirewall_scanner.py
         TEST_RESULT=$?
+        set -e
         if [ $TEST_RESULT -eq 0 ]; then
           echo "outcome=success" >> $GITHUB_OUTPUT
         else
@@ -178,8 +192,10 @@ jobs:
           exit 0
         fi
         echo "Running FactsChecker scanner test (7 tests including temporal awareness)..."
+        set +e
         python test_facts_checker_scanner.py
         TEST_RESULT=$?
+        set -e
         if [ $TEST_RESULT -eq 0 ]; then
           echo "outcome=success" >> $GITHUB_OUTPUT
         else

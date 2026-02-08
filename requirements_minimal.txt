@@ -16,3 +16,8 @@ requests>=2.28.0  # Required for AlignmentCheck API calls
 # with langchain-community (used by NeMo GuardRails). Pin to earlier version until fixed.
 # See NEMO_GUARDRAILS_FIX.md for details.
 openai<1.58.0
+
+# httpx version constraint (compatibility with LlamaFirewall + OpenAI SDK)
+# Issue: httpx 0.28.0 removed the `proxies` parameter, which breaks
+# LlamaFirewall and OpenAI SDK's httpx.Client() calls.
+httpx<0.28.0
