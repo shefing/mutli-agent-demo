@@ -20,15 +20,15 @@ from multi_agent_demo.core import run_scanners_on_session, aggregate_results
 from multi_agent_demo.reports import generate_markdown_report
 
 
-# ANSI color codes for terminal output
+# ANSI color codes for terminal output (disabled when stdout is not a terminal)
 class Colors:
-    RESET = '\033[0m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    BOLD = '\033[1m'
+    RESET = '\033[0m' if sys.stdout.isatty() else ''
+    GREEN = '\033[92m' if sys.stdout.isatty() else ''
+    YELLOW = '\033[93m' if sys.stdout.isatty() else ''
+    RED = '\033[91m' if sys.stdout.isatty() else ''
+    BLUE = '\033[94m' if sys.stdout.isatty() else ''
+    CYAN = '\033[96m' if sys.stdout.isatty() else ''
+    BOLD = '\033[1m' if sys.stdout.isatty() else ''
 
 
 def print_colored(text: str, color: str = Colors.RESET):
