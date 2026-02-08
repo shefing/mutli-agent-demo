@@ -66,11 +66,17 @@ def run_scanners_on_session(
                 LlamaFirewall,
                 Role,
                 ScannerType,
+                SystemMessage,
                 UserMessage,
                 AssistantMessage,
                 ScanDecision
             )
             import os
+            import logging
+
+            # Suppress noisy LlamaFirewall warnings about SystemMessage in trace
+            # (fires for each non-UserMessage before finding the first UserMessage)
+            logging.getLogger("llamafirewall").setLevel(logging.ERROR)
 
             # Check if TOGETHER_API_KEY is configured
             together_key = os.getenv("TOGETHER_API_KEY")
@@ -82,9 +88,11 @@ def run_scanners_on_session(
             firewall = LlamaFirewall(scanner_config)
 
             # Build trace from messages
+            # Use SystemMessage for agent purpose so that AlignmentCheck
+            # picks the first real UserMessage as the goal to evaluate against
             trace = []
             if purpose:
-                trace.append(UserMessage(content=f"My goal is: {purpose}"))
+                trace.append(SystemMessage(content=purpose))
 
             for msg in messages:
                 if msg["type"] == "user":
@@ -121,7 +129,7 @@ def run_scanners_on_session(
                     # Build trace up to and including this message
                     msg_trace = []
                     if purpose:
-                        msg_trace.append(UserMessage(content=f"My goal is: {purpose}"))
+                        msg_trace.append(SystemMessage(content=purpose))
 
                     for i, m in enumerate(messages[:msg_idx + 1]):
                         if m["type"] == "user":

@@ -362,23 +362,20 @@ def _append_scanner_result(lines: List[str], scanner_name: str, scanner_result: 
 
     # Top-level reason (if available)
     if scanner_result.get("reason"):
-        reason = scanner_result["reason"]
-        if len(reason) > 200:
-            reason = reason[:200] + "..."
-        lines.append(f"  - _Reason:_ {reason}")
+        lines.append(f"  - _Reason:_ {scanner_result['reason']}")
 
     # Per-message details (show non-SAFE messages)
+    # message_results contains only assistant messages; use 1-based position
+    # as the assistant message number (message_index is the raw index in the
+    # full user+assistant array and would be confusing to display).
     message_results = scanner_result.get("message_results", [])
-    flagged = [m for m in message_results if m.get("decision") != "SAFE"]
+    flagged = [(i, m) for i, m in enumerate(message_results, 1) if m.get("decision") != "SAFE"]
     if flagged:
         lines.append(f"  - **Flagged messages ({len(flagged)}):**")
-        for m in flagged:
-            msg_idx = m.get("message_index", "?")
+        for assistant_num, m in flagged:
             msg_decision = m.get("decision", "?")
             reason = m.get("reason", "")
-            if len(reason) > 200:
-                reason = reason[:200] + "..."
             icon = "🔴" if msg_decision == "BLOCK" else "🟡"
-            lines.append(f"    - {icon} Message #{msg_idx}: **{msg_decision}** — {reason}")
+            lines.append(f"    - {icon} Assistant message #{assistant_num}: **{msg_decision}** — {reason}")
 
     lines.append("")
