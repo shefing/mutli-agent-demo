@@ -65,154 +65,62 @@ jobs:
     - name: Run DataDisclosureGuard false positive test
       id: test_disclosure_fix
       continue-on-error: true
-      run: |
-        python test_data_disclosure_fix.py
-        echo "status=$?" >> $GITHUB_OUTPUT
+      run: python test_data_disclosure_fix.py
 
     - name: Run DataDisclosureGuard alignment test
       id: test_alignment_fix
       continue-on-error: true
-      run: |
-        python test_alignment_fix.py
-        echo "status=$?" >> $GITHUB_OUTPUT
+      run: python test_alignment_fix.py
 
     - name: Run user-provided notification contact test
       id: test_notification_contact
       continue-on-error: true
-      run: |
-        python test_user_provided_notification_contact.py
-        echo "status=$?" >> $GITHUB_OUTPUT
+      run: python test_user_provided_notification_contact.py
 
     - name: Run deviation/bias detection test
       id: test_deviations
       continue-on-error: true
-      run: |
-        python test_deviations.py
-        echo "status=$?" >> $GITHUB_OUTPUT
+      run: python test_deviations.py
 
     - name: Run PromptGuard scanner test
       id: test_prompt_guard
       continue-on-error: true
-      run: |
-        python test_prompt_guard_scanner.py
-        echo "status=$?" >> $GITHUB_OUTPUT
+      run: python test_prompt_guard_scanner.py
 
-    - name: Run AlignmentCheck dual dimensions test (optional)
+    - name: Run AlignmentCheck dual dimensions test
       id: test_alignment_dual_dimensions
       continue-on-error: true
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-      run: |
-        if [ -z "$TOGETHER_API_KEY" ]; then
-          echo "⏭️ Skipping AlignmentCheck dual dimensions test (TOGETHER_API_KEY not configured)"
-          echo "outcome=skipped" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        echo "Running AlignmentCheck dual dimensions test (Intended Use + User Request)..."
-        set +e
-        python test_alignment_dual_dimensions.py
-        TEST_RESULT=$?
-        set -e
-        if [ $TEST_RESULT -eq 0 ]; then
-          echo "outcome=success" >> $GITHUB_OUTPUT
-        else
-          echo "outcome=failure" >> $GITHUB_OUTPUT
-          exit $TEST_RESULT
-        fi
+      run: python test_alignment_dual_dimensions.py
 
-    - name: Run AlignmentCheck vs FactChecker separation test (optional)
+    - name: Run AlignmentCheck vs FactChecker separation test
       id: test_alignment_vs_factchecker
       continue-on-error: true
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-      run: |
-        if [ -z "$TOGETHER_API_KEY" ]; then
-          echo "⏭️ Skipping AlignmentCheck vs FactChecker test (TOGETHER_API_KEY not configured)"
-          echo "outcome=skipped" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        echo "Running AlignmentCheck vs FactChecker separation test..."
-        set +e
-        python test_alignment_vs_factchecker.py
-        TEST_RESULT=$?
-        set -e
-        if [ $TEST_RESULT -eq 0 ]; then
-          echo "outcome=success" >> $GITHUB_OUTPUT
-        else
-          echo "outcome=failure" >> $GITHUB_OUTPUT
-          exit $TEST_RESULT
-        fi
+      run: python test_alignment_vs_factchecker.py
 
-    - name: Run AlignmentCheck scanner test (optional)
+    - name: Run AlignmentCheck scanner test
       id: test_alignment_check
       continue-on-error: true
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: |
-        if [ -z "$OPENAI_API_KEY" ]; then
-          echo "⏭️ Skipping AlignmentCheck test (OPENAI_API_KEY not configured)"
-          echo "   To enable: Add OPENAI_API_KEY to GitHub repository secrets"
-          echo "outcome=skipped" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        echo "Running AlignmentCheck test with GPT-4o-mini..."
-        set +e
-        python test_alignment_check.py
-        TEST_RESULT=$?
-        set -e
-        if [ $TEST_RESULT -eq 0 ]; then
-          echo "outcome=success" >> $GITHUB_OUTPUT
-        else
-          echo "outcome=failure" >> $GITHUB_OUTPUT
-          exit $TEST_RESULT
-        fi
+      run: python test_alignment_check.py
 
-    - name: Run Native LlamaFirewall scanner test (optional)
+    - name: Run Native LlamaFirewall scanner test
       id: test_native_llamafirewall
       continue-on-error: true
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-      run: |
-        if [ -z "$TOGETHER_API_KEY" ]; then
-          echo "⏭️ Skipping Native LlamaFirewall test (TOGETHER_API_KEY not configured)"
-          echo "outcome=skipped" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        echo "Running Native LlamaFirewall scanner test..."
-        set +e
-        python test_native_llamafirewall_scanner.py
-        TEST_RESULT=$?
-        set -e
-        if [ $TEST_RESULT -eq 0 ]; then
-          echo "outcome=success" >> $GITHUB_OUTPUT
-        else
-          echo "outcome=failure" >> $GITHUB_OUTPUT
-          exit $TEST_RESULT
-        fi
+      run: python test_native_llamafirewall_scanner.py
 
-    - name: Run FactsChecker scanner test (optional)
+    - name: Run FactsChecker scanner test
       id: test_facts_checker
       continue-on-error: true
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: |
-        if [ -z "$OPENAI_API_KEY" ]; then
-          echo "⏭️ Skipping FactsChecker test (OPENAI_API_KEY not configured)"
-          echo "   To enable: Add OPENAI_API_KEY to GitHub repository secrets"
-          echo "outcome=skipped" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        echo "Running FactsChecker scanner test (7 tests including temporal awareness)..."
-        set +e
-        python test_facts_checker_scanner.py
-        TEST_RESULT=$?
-        set -e
-        if [ $TEST_RESULT -eq 0 ]; then
-          echo "outcome=success" >> $GITHUB_OUTPUT
-        else
-          echo "outcome=failure" >> $GITHUB_OUTPUT
-          exit $TEST_RESULT
-        fi
+      run: python test_facts_checker_scanner.py
 
     - name: Collect test results
       id: results
@@ -220,131 +128,63 @@ jobs:
       run: |
         FAILED=0
         PASSED=0
-        SKIPPED=0
-        TOTAL=5
+        TOTAL=10
         FAILED_TESTS=""
 
-        # Core tests (always run)
+        # Check each test outcome
         if [ "${{ steps.test_disclosure_fix.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_data_disclosure_fix.py\n"
-        else
-          PASSED=$((PASSED + 1))
-        fi
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_data_disclosure_fix.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
         if [ "${{ steps.test_alignment_fix.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_alignment_fix.py\n"
-        else
-          PASSED=$((PASSED + 1))
-        fi
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_fix.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
         if [ "${{ steps.test_notification_contact.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_user_provided_notification_contact.py\n"
-        else
-          PASSED=$((PASSED + 1))
-        fi
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_user_provided_notification_contact.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
         if [ "${{ steps.test_deviations.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_deviations.py\n"
-        else
-          PASSED=$((PASSED + 1))
-        fi
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_deviations.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
         if [ "${{ steps.test_prompt_guard.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_prompt_guard_scanner.py\n"
-        else
-          PASSED=$((PASSED + 1))
-        fi
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_prompt_guard_scanner.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
-        # Optional tests (AlignmentCheck - requires API key)
-        # Test 1: AlignmentCheck dual dimensions
-        ALIGNMENT_DUAL_OUTCOME="${{ steps.test_alignment_dual_dimensions.outputs.outcome }}"
-        ALIGNMENT_DUAL_STEP_OUTCOME="${{ steps.test_alignment_dual_dimensions.outcome }}"
-        if [ "$ALIGNMENT_DUAL_OUTCOME" == "skipped" ]; then
-          SKIPPED=$((SKIPPED + 1))
-        elif [ "$ALIGNMENT_DUAL_OUTCOME" == "success" ]; then
-          PASSED=$((PASSED + 1))
-          TOTAL=$((TOTAL + 1))
-        elif [ "$ALIGNMENT_DUAL_OUTCOME" == "failure" ] || [ "$ALIGNMENT_DUAL_STEP_OUTCOME" == "failure" ]; then
-          FAILED=$((FAILED + 1))
-          TOTAL=$((TOTAL + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_alignment_dual_dimensions.py\n"
-        fi
+        if [ "${{ steps.test_alignment_dual_dimensions.outcome }}" != "success" ]; then
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_dual_dimensions.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
-        # Test 2: AlignmentCheck vs FactChecker separation
-        ALIGNMENT_VS_FACTCHECKER_OUTCOME="${{ steps.test_alignment_vs_factchecker.outputs.outcome }}"
-        ALIGNMENT_VS_FACTCHECKER_STEP_OUTCOME="${{ steps.test_alignment_vs_factchecker.outcome }}"
-        if [ "$ALIGNMENT_VS_FACTCHECKER_OUTCOME" == "skipped" ]; then
-          SKIPPED=$((SKIPPED + 1))
-        elif [ "$ALIGNMENT_VS_FACTCHECKER_OUTCOME" == "success" ]; then
-          PASSED=$((PASSED + 1))
-          TOTAL=$((TOTAL + 1))
-        elif [ "$ALIGNMENT_VS_FACTCHECKER_OUTCOME" == "failure" ] || [ "$ALIGNMENT_VS_FACTCHECKER_STEP_OUTCOME" == "failure" ]; then
-          FAILED=$((FAILED + 1))
-          TOTAL=$((TOTAL + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_alignment_vs_factchecker.py\n"
-        fi
+        if [ "${{ steps.test_alignment_vs_factchecker.outcome }}" != "success" ]; then
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_vs_factchecker.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
-        # Test 3: AlignmentCheck scanner test
-        ALIGNMENT_OUTCOME="${{ steps.test_alignment_check.outputs.outcome }}"
-        ALIGNMENT_STEP_OUTCOME="${{ steps.test_alignment_check.outcome }}"
-        if [ "$ALIGNMENT_OUTCOME" == "skipped" ]; then
-          SKIPPED=$((SKIPPED + 1))
-        elif [ "$ALIGNMENT_OUTCOME" == "success" ]; then
-          PASSED=$((PASSED + 1))
-          TOTAL=$((TOTAL + 1))
-        elif [ "$ALIGNMENT_OUTCOME" == "failure" ] || [ "$ALIGNMENT_STEP_OUTCOME" == "failure" ]; then
-          FAILED=$((FAILED + 1))
-          TOTAL=$((TOTAL + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_alignment_check.py\n"
-        fi
+        if [ "${{ steps.test_alignment_check.outcome }}" != "success" ]; then
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_check.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
-        # Test 4: Native LlamaFirewall scanner test
-        NATIVE_LLAMAFIREWALL_OUTCOME="${{ steps.test_native_llamafirewall.outputs.outcome }}"
-        NATIVE_LLAMAFIREWALL_STEP_OUTCOME="${{ steps.test_native_llamafirewall.outcome }}"
-        if [ "$NATIVE_LLAMAFIREWALL_OUTCOME" == "skipped" ]; then
-          SKIPPED=$((SKIPPED + 1))
-        elif [ "$NATIVE_LLAMAFIREWALL_OUTCOME" == "success" ]; then
-          PASSED=$((PASSED + 1))
-          TOTAL=$((TOTAL + 1))
-        elif [ "$NATIVE_LLAMAFIREWALL_OUTCOME" == "failure" ] || [ "$NATIVE_LLAMAFIREWALL_STEP_OUTCOME" == "failure" ]; then
-          FAILED=$((FAILED + 1))
-          TOTAL=$((TOTAL + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_native_llamafirewall_scanner.py\n"
-        fi
+        if [ "${{ steps.test_native_llamafirewall.outcome }}" != "success" ]; then
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_native_llamafirewall_scanner.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
-        # Test 5: FactsChecker scanner test
-        FACTS_CHECKER_OUTCOME="${{ steps.test_facts_checker.outputs.outcome }}"
-        FACTS_CHECKER_STEP_OUTCOME="${{ steps.test_facts_checker.outcome }}"
-        if [ "$FACTS_CHECKER_OUTCOME" == "skipped" ]; then
-          SKIPPED=$((SKIPPED + 1))
-        elif [ "$FACTS_CHECKER_OUTCOME" == "success" ]; then
-          PASSED=$((PASSED + 1))
-          TOTAL=$((TOTAL + 1))
-        elif [ "$FACTS_CHECKER_OUTCOME" == "failure" ] || [ "$FACTS_CHECKER_STEP_OUTCOME" == "failure" ]; then
-          # Count as failure if either the output says failure OR the step itself failed
-          FAILED=$((FAILED + 1))
-          TOTAL=$((TOTAL + 1))
-          FAILED_TESTS="${FAILED_TESTS}• test_facts_checker_scanner.py\n"
-        fi
+        if [ "${{ steps.test_facts_checker.outcome }}" != "success" ]; then
+          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_facts_checker_scanner.py\n"
+        else PASSED=$((PASSED + 1)); fi
 
-        # If no tests failed, set a default message
         if [ -z "$FAILED_TESTS" ]; then
           FAILED_TESTS="None"
         fi
 
-        echo "failed=$FAILED" >> $GITHUB_OUTPUT
         echo "passed=$PASSED" >> $GITHUB_OUTPUT
-        echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+        echo "failed=$FAILED" >> $GITHUB_OUTPUT
         echo "total=$TOTAL" >> $GITHUB_OUTPUT
         echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
 
-        # Fail the job if any tests failed
+        echo "Results: $PASSED/$TOTAL passed"
         if [ $FAILED -gt 0 ]; then
+          echo "❌ Failed tests:"
+          echo -e "$FAILED_TESTS"
           exit 1
         fi
 
@@ -387,13 +227,6 @@ jobs:
               },
               {
                 "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*Commit Message:*\n${{ github.event.head_commit.message }}"
-                }
-              },
-              {
-                "type": "section",
                 "fields": [
                   {
                     "type": "mrkdwn",
@@ -402,10 +235,6 @@ jobs:
                   {
                     "type": "mrkdwn",
                     "text": "*Tests Failed:* ${{ steps.results.outputs.failed }}/${{ steps.results.outputs.total }}"
-                  },
-                  {
-                    "type": "mrkdwn",
-                    "text": "*Tests Skipped:* ${{ steps.results.outputs.skipped }}"
                   }
                 ]
               },
@@ -413,7 +242,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Core Tests (5):*\n• test_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\n• test_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\n• test_user_provided_notification_contact.py: ${{ steps.test_notification_contact.outcome }}\n• test_deviations.py: ${{ steps.test_deviations.outcome }}\n• test_prompt_guard_scanner.py: ${{ steps.test_prompt_guard.outcome }}\n\n*Optional Tests (require API keys):*\n• test_alignment_dual_dimensions.py: ${{ steps.test_alignment_dual_dimensions.outputs.outcome }} (TOGETHER_API_KEY)\n• test_alignment_vs_factchecker.py: ${{ steps.test_alignment_vs_factchecker.outputs.outcome }} (TOGETHER_API_KEY)\n• test_native_llamafirewall_scanner.py: ${{ steps.test_native_llamafirewall.outputs.outcome }} (TOGETHER_API_KEY)\n• test_alignment_check.py: ${{ steps.test_alignment_check.outputs.outcome }} (OPENAI_API_KEY)\n• test_facts_checker_scanner.py: ${{ steps.test_facts_checker.outputs.outcome }} (OPENAI_API_KEY)"
+                  "text": "*All Tests:*\n• test_data_disclosure_fix.py: ${{ steps.test_disclosure_fix.outcome }}\n• test_alignment_fix.py: ${{ steps.test_alignment_fix.outcome }}\n• test_user_provided_notification_contact.py: ${{ steps.test_notification_contact.outcome }}\n• test_deviations.py: ${{ steps.test_deviations.outcome }}\n• test_prompt_guard_scanner.py: ${{ steps.test_prompt_guard.outcome }}\n• test_alignment_dual_dimensions.py: ${{ steps.test_alignment_dual_dimensions.outcome }}\n• test_alignment_vs_factchecker.py: ${{ steps.test_alignment_vs_factchecker.outcome }}\n• test_alignment_check.py: ${{ steps.test_alignment_check.outcome }}\n• test_native_llamafirewall_scanner.py: ${{ steps.test_native_llamafirewall.outcome }}\n• test_facts_checker_scanner.py: ${{ steps.test_facts_checker.outcome }}"
                 }
               },
               {
@@ -486,7 +315,7 @@ jobs:
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*Commit:* <${{ github.event.head_commit.url }}|${{ github.sha }}>\n${{ github.event.head_commit.message }}"
+                  "text": "*Commit:* <${{ github.event.head_commit.url }}|${{ github.sha }}>"
                 }
               }
             ]
