@@ -13,6 +13,7 @@ from llamafirewall import (
     Role,
     ScannerType,
     ScanDecision,
+    SystemMessage,
     Trace,
     UserMessage,
 )
@@ -135,9 +136,10 @@ def build_trace(purpose: str, messages: List[Dict]) -> Trace:
     """Build LlamaFirewall trace from conversation"""
     trace = []
 
-    # Add purpose as first message if provided
+    # Add purpose as system context so that AlignmentCheck picks
+    # the first real UserMessage as the goal to evaluate against
     if purpose:
-        trace.append(UserMessage(content=f"My goal is: {purpose}"))
+        trace.append(SystemMessage(content=purpose))
 
     for msg in messages:
         if msg["type"] == "user":
@@ -234,17 +236,80 @@ def run_scanner_tests():
     promptguard_result = None
     nemo_results = {}
 
-    # Test AlignmentCheck if enabled (with fallback to direct API if firewall fails)
-    print(f"🔍 AlignmentCheck enabled: {enabled_scanners.get('AlignmentCheck', False)}")
-    print(f"🔍 Firewall object: {firewall is not None}")
+    # Test AlignmentCheck if enabled (native LlamaFirewall first, fallback to GPT-4o-mini)
     if enabled_scanners.get("AlignmentCheck", False):
         print("✅ Running AlignmentCheck scanner...")
-        # Use per-message validation for normalized results
-        print("ℹ️ Using per-message AlignmentCheck validation")
-        alignment_result = scan_alignment_check_per_message(
-            st.session_state.current_conversation["messages"],
-            st.session_state.current_conversation["purpose"]
-        )
+        messages = st.session_state.current_conversation["messages"]
+        purpose = st.session_state.current_conversation["purpose"]
+        try:
+            import os
+            import logging
+            logging.getLogger("llamafirewall").setLevel(logging.ERROR)
+
+            together_key = os.getenv("TOGETHER_API_KEY")
+            if not together_key:
+                raise Exception("TOGETHER_API_KEY not configured")
+
+            scanner_config = {Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT]}
+            ac_firewall = LlamaFirewall(scanner_config)
+
+            assistant_messages = [(i, msg) for i, msg in enumerate(messages) if msg.get("type") == "assistant"]
+            if not assistant_messages:
+                alignment_result = {
+                    "scanner": "AlignmentCheck",
+                    "overall_decision": "SAFE",
+                    "counts": {"safe": 0, "warning": 0, "block": 0, "total": 0},
+                    "message_results": [],
+                    "method": "native_llamafirewall"
+                }
+            else:
+                message_results = []
+                for msg_idx, msg in assistant_messages:
+                    msg_trace = []
+                    if purpose:
+                        msg_trace.append(SystemMessage(content=purpose))
+                    for m in messages[:msg_idx + 1]:
+                        if m["type"] == "user":
+                            msg_trace.append(UserMessage(content=m["content"]))
+                        elif m["type"] == "assistant":
+                            if m.get("action"):
+                                formatted = json.dumps({
+                                    "thought": m["content"],
+                                    "action": m["action"],
+                                    "action_input": m.get("action_input", {})
+                                })
+                                msg_trace.append(AssistantMessage(content=formatted))
+                            else:
+                                msg_trace.append(AssistantMessage(content=m["content"]))
+                    result = ac_firewall.scan_replay(msg_trace)
+                    decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
+                    message_results.append({
+                        "message_index": msg_idx,
+                        "message_type": "assistant",
+                        "decision": decision,
+                        "reason": result.reason
+                    })
+
+                counts = {
+                    "safe": sum(1 for r in message_results if r["decision"] == "SAFE"),
+                    "warning": sum(1 for r in message_results if r["decision"] == "WARNING"),
+                    "block": sum(1 for r in message_results if r["decision"] == "BLOCK"),
+                    "total": len(message_results)
+                }
+                overall = "BLOCK" if counts["block"] > 0 else "WARNING" if counts["warning"] > 0 else "SAFE"
+                alignment_result = {
+                    "scanner": "AlignmentCheck",
+                    "overall_decision": overall,
+                    "counts": counts,
+                    "message_results": message_results,
+                    "method": "native_llamafirewall"
+                }
+                print(f"✅ Native LlamaFirewall AlignmentCheck: {overall}")
+        except Exception as e:
+            print(f"⚠️ Native LlamaFirewall failed: {str(e)}, using GPT-4o-mini fallback...")
+            alignment_result = scan_alignment_check_per_message(messages, purpose)
+            if isinstance(alignment_result, dict):
+                alignment_result["method"] = "gpt4o_mini_fallback"
     else:
         print("⚠️ AlignmentCheck is DISABLED - skipping")
 
@@ -265,7 +330,8 @@ def run_scanner_tests():
     if enabled_scanners.get("FactsChecker", False) and NEMO_GUARDRAILS_AVAILABLE:
         # Pass purpose as context for RAG groundedness validation
         # In a real RAG system, this would be the retrieved documentation/evidence
-        nemo_results["FactsChecker"] = nemo_scanners["FactsChecker"].scan(messages, context=purpose)
+        current_date = datetime.now().strftime("%B %d, %Y")
+        nemo_results["FactsChecker"] = nemo_scanners["FactsChecker"].scan(messages, context=purpose, current_date=current_date)
 
     if enabled_scanners.get("DataDisclosureGuard", False) and PRESIDIO_AVAILABLE:
         nemo_results["DataDisclosureGuard"] = nemo_scanners["DataDisclosureGuard"].scan(messages, purpose)
