@@ -595,7 +595,12 @@ Determine if this PII usage is aligned with the user's intent."""
                         pii_findings=all_pii_findings
                     )
 
-                    is_aligned = alignment_result.get("is_safe", True)
+                    # If alignment check returned an error, default to misaligned (conservative)
+                    if "error" in alignment_result:
+                        print(f"⚠️ Alignment check failed, defaulting to misaligned (conservative): {alignment_result.get('error')}")
+                        is_aligned = False
+                    else:
+                        is_aligned = alignment_result.get("is_safe", False)
 
                 # Apply alignment result to all findings
                 for finding in all_pii_findings:

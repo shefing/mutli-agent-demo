@@ -83,6 +83,8 @@ jobs:
     - name: Run DataDisclosureGuard alignment test
       id: test_alignment_fix
       continue-on-error: true
+      env:
+        TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
       run: |
         set +e
         python test_alignment_fix.py 2>&1 | tee /tmp/test_output.txt
@@ -176,7 +178,7 @@ jobs:
       id: test_alignment_vs_factchecker
       continue-on-error: true
       env:
-        TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         set +e
         python test_alignment_vs_factchecker.py 2>&1 | tee /tmp/test_output.txt

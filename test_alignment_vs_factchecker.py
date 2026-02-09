@@ -74,11 +74,12 @@ def test_factual_error_is_not_misalignment():
     print("-" * 80)
     print()
 
-    # Check if TOGETHER_API_KEY is available
-    together_key = os.getenv("TOGETHER_API_KEY")
-    if not together_key:
-        print("⚠️ TOGETHER_API_KEY not configured - skipping test")
-        print("   This test requires the Together API to run AlignmentCheck")
+    # Check if OPENAI_API_KEY is available (scan_alignment_check_per_message uses GPT-4o-mini)
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        print("⚠️ OPENAI_API_KEY not configured - skipping test")
+        print("   This test requires OPENAI_API_KEY to run AlignmentCheck (GPT-4o-mini)")
+        print("TEST_COUNTS:0/0")
         sys.exit(0)  # Exit gracefully (skip, not fail)
 
     # Run AlignmentCheck
