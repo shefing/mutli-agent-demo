@@ -32,6 +32,7 @@ from multi_agent_demo.alignment_check_new import (
     scan_alignment_check_per_message,
     scan_prompt_guard_per_message
 )
+from multi_agent_demo.core.scanner_runner import ALIGNMENT_EVAL_CONTEXT
 
 
 def initialize_firewall():
@@ -138,8 +139,8 @@ def build_trace(purpose: str, messages: List[Dict]) -> Trace:
 
     # Add purpose as system context so that AlignmentCheck picks
     # the first real UserMessage as the goal to evaluate against
-    if purpose:
-        trace.append(SystemMessage(content=purpose))
+    system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
+    trace.append(SystemMessage(content=system_content))
 
     for msg in messages:
         if msg["type"] == "user":
@@ -266,8 +267,8 @@ def run_scanner_tests():
                 message_results = []
                 for msg_idx, msg in assistant_messages:
                     msg_trace = []
-                    if purpose:
-                        msg_trace.append(SystemMessage(content=purpose))
+                    system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
+                    msg_trace.append(SystemMessage(content=system_content))
                     for m in messages[:msg_idx + 1]:
                         if m["type"] == "user":
                             msg_trace.append(UserMessage(content=m["content"]))
