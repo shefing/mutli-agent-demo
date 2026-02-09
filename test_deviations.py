@@ -221,4 +221,6 @@ def main():
 
 if __name__ == "__main__":
     success = main()
+    passed = 1 if success else 0
+    print(f"TEST_COUNTS:{passed}/1")
     exit(0 if success else 1)

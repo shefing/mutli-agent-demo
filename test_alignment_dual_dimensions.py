@@ -177,11 +177,13 @@ def test_all_cases():
 
     print("="*80)
 
+    run_total = len(results) - skipped
+    print(f"TEST_COUNTS:{passed}/{run_total}")
     if skipped == len(results):
         print("⏭️ All tests skipped (TOGETHER_API_KEY not configured)")
         sys.exit(0)
     elif failed > 0:
-        print(f"❌ FAILURE: {failed}/{len(results) - skipped} tests failed")
+        print(f"❌ FAILURE: {failed}/{run_total} tests failed")
         sys.exit(1)
     else:
         print(f"🎉 SUCCESS: All tests passed!")

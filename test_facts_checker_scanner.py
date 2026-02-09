@@ -398,6 +398,7 @@ def main():
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{status}: {test_name}")
 
+    print(f"TEST_COUNTS:{passed}/{total}")
     print("\n" + "="*80)
     if passed == total:
         print(f"✅ ALL TESTS PASSED ({passed}/{total})")

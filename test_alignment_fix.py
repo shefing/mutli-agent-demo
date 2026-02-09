@@ -179,12 +179,17 @@ def test_misaligned_disclosure():
     print()
     print("=" * 80)
 
+    passed = sum(checks)
+    total = len(checks)
     if all(checks):
         print("🎉 ALL CHECKS PASSED! DataDisclosureGuard working correctly!")
     else:
-        print(f"⚠️ {sum(checks)}/{len(checks)} checks passed. Some issues remain.")
+        print(f"⚠️ {passed}/{total} checks passed. Some issues remain.")
 
+    print(f"TEST_COUNTS:{passed}/{total}")
     print("=" * 80)
+    return all(checks)
 
 if __name__ == "__main__":
-    test_misaligned_disclosure()
+    success = test_misaligned_disclosure()
+    sys.exit(0 if success else 1)

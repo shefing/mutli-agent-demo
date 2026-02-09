@@ -65,126 +65,248 @@ jobs:
     - name: Run DataDisclosureGuard false positive test
       id: test_disclosure_fix
       continue-on-error: true
-      run: python test_data_disclosure_fix.py
+      run: |
+        set +e
+        python test_data_disclosure_fix.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run DataDisclosureGuard alignment test
       id: test_alignment_fix
       continue-on-error: true
-      run: python test_alignment_fix.py
+      run: |
+        set +e
+        python test_alignment_fix.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run user-provided notification contact test
       id: test_notification_contact
       continue-on-error: true
-      run: python test_user_provided_notification_contact.py
+      run: |
+        set +e
+        python test_user_provided_notification_contact.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run deviation/bias detection test
       id: test_deviations
       continue-on-error: true
-      run: python test_deviations.py
+      run: |
+        set +e
+        python test_deviations.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run PromptGuard scanner test
       id: test_prompt_guard
       continue-on-error: true
-      run: python test_prompt_guard_scanner.py
+      run: |
+        set +e
+        python test_prompt_guard_scanner.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run AlignmentCheck dual dimensions test
       id: test_alignment_dual_dimensions
       continue-on-error: true
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-      run: python test_alignment_dual_dimensions.py
+      run: |
+        set +e
+        python test_alignment_dual_dimensions.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run AlignmentCheck vs FactChecker separation test
       id: test_alignment_vs_factchecker
       continue-on-error: true
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-      run: python test_alignment_vs_factchecker.py
+      run: |
+        set +e
+        python test_alignment_vs_factchecker.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run AlignmentCheck scanner test
       id: test_alignment_check
       continue-on-error: true
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: python test_alignment_check.py
+      run: |
+        set +e
+        python test_alignment_check.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run Native LlamaFirewall scanner test
       id: test_native_llamafirewall
       continue-on-error: true
       env:
         TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-      run: python test_native_llamafirewall_scanner.py
+      run: |
+        set +e
+        python test_native_llamafirewall_scanner.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Run FactsChecker scanner test
       id: test_facts_checker
       continue-on-error: true
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: python test_facts_checker_scanner.py
+      run: |
+        set +e
+        python test_facts_checker_scanner.py 2>&1 | tee /tmp/test_output.txt
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+        COUNTS=$(grep -o 'TEST_COUNTS:[0-9]*/[0-9]*' /tmp/test_output.txt | tail -1)
+        if [ -n "$COUNTS" ]; then
+          echo "passed=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f1)" >> $GITHUB_OUTPUT
+          echo "total=$(echo $COUNTS | cut -d: -f2 | cut -d/ -f2)" >> $GITHUB_OUTPUT
+        else
+          echo "passed=0" >> $GITHUB_OUTPUT
+          echo "total=1" >> $GITHUB_OUTPUT
+        fi
+        exit $EXIT_CODE
 
     - name: Collect test results
       id: results
       if: always()
       run: |
-        FAILED=0
-        PASSED=0
-        TOTAL=10
-        FAILED_TESTS=""
+        TOTAL_PASSED=0
+        TOTAL_SCENARIOS=0
+        FAILED_FILES=""
 
-        # Check each test outcome
-        if [ "${{ steps.test_disclosure_fix.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_data_disclosure_fix.py\n"
-        else PASSED=$((PASSED + 1)); fi
+        # Helper: add counts from a test step
+        add_counts() {
+          local file_name="$1"
+          local step_passed="$2"
+          local step_total="$3"
+          local step_outcome="$4"
 
-        if [ "${{ steps.test_alignment_fix.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_fix.py\n"
-        else PASSED=$((PASSED + 1)); fi
+          # Default to 0 if empty (step was skipped)
+          step_passed=${step_passed:-0}
+          step_total=${step_total:-0}
 
-        if [ "${{ steps.test_notification_contact.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_user_provided_notification_contact.py\n"
-        else PASSED=$((PASSED + 1)); fi
+          TOTAL_PASSED=$((TOTAL_PASSED + step_passed))
+          TOTAL_SCENARIOS=$((TOTAL_SCENARIOS + step_total))
 
-        if [ "${{ steps.test_deviations.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_deviations.py\n"
-        else PASSED=$((PASSED + 1)); fi
+          if [ "$step_outcome" != "success" ]; then
+            local step_failed=$((step_total - step_passed))
+            FAILED_FILES="${FAILED_FILES}• ${file_name} (${step_passed}/${step_total} scenarios passed)\n"
+          fi
+        }
 
-        if [ "${{ steps.test_prompt_guard.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_prompt_guard_scanner.py\n"
-        else PASSED=$((PASSED + 1)); fi
+        # Collect counts from each test step
+        add_counts "test_data_disclosure_fix.py" "${{ steps.test_disclosure_fix.outputs.passed }}" "${{ steps.test_disclosure_fix.outputs.total }}" "${{ steps.test_disclosure_fix.outcome }}"
+        add_counts "test_alignment_fix.py" "${{ steps.test_alignment_fix.outputs.passed }}" "${{ steps.test_alignment_fix.outputs.total }}" "${{ steps.test_alignment_fix.outcome }}"
+        add_counts "test_user_provided_notification_contact.py" "${{ steps.test_notification_contact.outputs.passed }}" "${{ steps.test_notification_contact.outputs.total }}" "${{ steps.test_notification_contact.outcome }}"
+        add_counts "test_deviations.py" "${{ steps.test_deviations.outputs.passed }}" "${{ steps.test_deviations.outputs.total }}" "${{ steps.test_deviations.outcome }}"
+        add_counts "test_prompt_guard_scanner.py" "${{ steps.test_prompt_guard.outputs.passed }}" "${{ steps.test_prompt_guard.outputs.total }}" "${{ steps.test_prompt_guard.outcome }}"
+        add_counts "test_alignment_dual_dimensions.py" "${{ steps.test_alignment_dual_dimensions.outputs.passed }}" "${{ steps.test_alignment_dual_dimensions.outputs.total }}" "${{ steps.test_alignment_dual_dimensions.outcome }}"
+        add_counts "test_alignment_vs_factchecker.py" "${{ steps.test_alignment_vs_factchecker.outputs.passed }}" "${{ steps.test_alignment_vs_factchecker.outputs.total }}" "${{ steps.test_alignment_vs_factchecker.outcome }}"
+        add_counts "test_alignment_check.py" "${{ steps.test_alignment_check.outputs.passed }}" "${{ steps.test_alignment_check.outputs.total }}" "${{ steps.test_alignment_check.outcome }}"
+        add_counts "test_native_llamafirewall_scanner.py" "${{ steps.test_native_llamafirewall.outputs.passed }}" "${{ steps.test_native_llamafirewall.outputs.total }}" "${{ steps.test_native_llamafirewall.outcome }}"
+        add_counts "test_facts_checker_scanner.py" "${{ steps.test_facts_checker.outputs.passed }}" "${{ steps.test_facts_checker.outputs.total }}" "${{ steps.test_facts_checker.outcome }}"
 
-        if [ "${{ steps.test_alignment_dual_dimensions.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_dual_dimensions.py\n"
-        else PASSED=$((PASSED + 1)); fi
+        TOTAL_FAILED=$((TOTAL_SCENARIOS - TOTAL_PASSED))
 
-        if [ "${{ steps.test_alignment_vs_factchecker.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_vs_factchecker.py\n"
-        else PASSED=$((PASSED + 1)); fi
-
-        if [ "${{ steps.test_alignment_check.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_alignment_check.py\n"
-        else PASSED=$((PASSED + 1)); fi
-
-        if [ "${{ steps.test_native_llamafirewall.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_native_llamafirewall_scanner.py\n"
-        else PASSED=$((PASSED + 1)); fi
-
-        if [ "${{ steps.test_facts_checker.outcome }}" != "success" ]; then
-          FAILED=$((FAILED + 1)); FAILED_TESTS="${FAILED_TESTS}• test_facts_checker_scanner.py\n"
-        else PASSED=$((PASSED + 1)); fi
-
-        if [ -z "$FAILED_TESTS" ]; then
-          FAILED_TESTS="None"
+        if [ -z "$FAILED_FILES" ]; then
+          FAILED_FILES="None"
         fi
 
-        echo "passed=$PASSED" >> $GITHUB_OUTPUT
-        echo "failed=$FAILED" >> $GITHUB_OUTPUT
-        echo "total=$TOTAL" >> $GITHUB_OUTPUT
-        echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
+        echo "passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
+        echo "failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+        echo "total=$TOTAL_SCENARIOS" >> $GITHUB_OUTPUT
+        echo "failed_tests=$FAILED_FILES" >> $GITHUB_OUTPUT
 
-        echo "Results: $PASSED/$TOTAL passed"
-        if [ $FAILED -gt 0 ]; then
-          echo "❌ Failed tests:"
-          echo -e "$FAILED_TESTS"
+        echo "Results: $TOTAL_PASSED/$TOTAL_SCENARIOS test scenarios passed ($TOTAL_FAILED failed)"
+        if [ $TOTAL_FAILED -gt 0 ]; then
+          echo "❌ Failed test files:"
+          echo -e "$FAILED_FILES"
           exit 1
         fi
 
@@ -230,11 +352,11 @@ jobs:
                 "fields": [
                   {
                     "type": "mrkdwn",
-                    "text": "*Tests Passed:* ${{ steps.results.outputs.passed }}/${{ steps.results.outputs.total }}"
+                    "text": "*Scenarios Passed:* ${{ steps.results.outputs.passed }}/${{ steps.results.outputs.total }}"
                   },
                   {
                     "type": "mrkdwn",
-                    "text": "*Tests Failed:* ${{ steps.results.outputs.failed }}/${{ steps.results.outputs.total }}"
+                    "text": "*Scenarios Failed:* ${{ steps.results.outputs.failed }}/${{ steps.results.outputs.total }}"
                   }
                 ]
               },
@@ -303,7 +425,7 @@ jobs:
                   },
                   {
                     "type": "mrkdwn",
-                    "text": "*Tests Passed:*\n${{ steps.results.outputs.passed }}/${{ steps.results.outputs.total }} ✅"
+                    "text": "*Scenarios Passed:*\n${{ steps.results.outputs.passed }}/${{ steps.results.outputs.total }} ✅"
                   },
                   {
                     "type": "mrkdwn",

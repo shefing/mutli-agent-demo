@@ -201,12 +201,15 @@ def test_user_provided_notification_contact():
     print()
     print("=" * 80)
 
+    passed = sum(checks)
+    total = len(checks)
+    print(f"TEST_COUNTS:{passed}/{total}")
     if all(checks):
         print("🎉 ALL CHECKS PASSED! User-provided notification contact handling works correctly!")
         print("=" * 80)
         sys.exit(0)
     else:
-        print(f"❌ FAILURE: {sum(checks)}/{len(checks)} checks passed")
+        print(f"❌ FAILURE: {passed}/{total} checks passed")
         print()
         print("Failed checks:")
         for failed in failed_checks:

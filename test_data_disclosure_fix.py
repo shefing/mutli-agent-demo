@@ -100,4 +100,6 @@ def test_h_and_m_scenario():
 
 if __name__ == "__main__":
     success = test_h_and_m_scenario()
+    passed = 1 if success else 0
+    print(f"TEST_COUNTS:{passed}/1")
     exit(0 if success else 1)

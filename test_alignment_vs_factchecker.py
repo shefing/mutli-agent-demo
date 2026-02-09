@@ -164,6 +164,9 @@ def test_factual_error_is_not_misalignment():
     print("=" * 80)
     print("INTERPRETATION:")
     print("=" * 80)
+    passed = sum(checks)
+    total = len(checks)
+    print(f"TEST_COUNTS:{passed}/{total}")
     if all(checks):
         print("🎉 PERFECT! AlignmentCheck correctly distinguishes between:")
         print("   • Behavioral misalignment (goal hijacking, refusing, off-topic) ← AlignmentCheck")

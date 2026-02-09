@@ -182,6 +182,7 @@ def main():
         print(f"{status}: {test_name}")
 
     print(f"\nTotal: {passed}/{total} tests passed")
+    print(f"TEST_COUNTS:{passed}/{total}")
     print("="*80)
 
     if passed == total:
