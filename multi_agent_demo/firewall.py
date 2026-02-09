@@ -32,7 +32,10 @@ from multi_agent_demo.alignment_check_new import (
     scan_alignment_check_per_message,
     scan_prompt_guard_per_message
 )
-from multi_agent_demo.core.scanner_runner import ALIGNMENT_EVAL_CONTEXT
+from multi_agent_demo.core.scanner_runner import (
+    ALIGNMENT_EVAL_CONTEXT,
+    check_trace_for_large_messages
+)
 
 
 def initialize_firewall():
@@ -282,6 +285,20 @@ def run_scanner_tests():
                                 msg_trace.append(AssistantMessage(content=formatted))
                             else:
                                 msg_trace.append(AssistantMessage(content=m["content"]))
+                    # Check if any message in the trace context is too large
+                    large_msg = check_trace_for_large_messages(messages, msg_idx)
+                    if large_msg:
+                        severity, reason = large_msg
+                        message_results.append({
+                            "message_index": msg_idx,
+                            "message_type": "assistant",
+                            "decision": "WARNING",
+                            "reason": reason,
+                            "skipped": True,
+                            "skip_severity": severity
+                        })
+                        continue
+
                     result = ac_firewall.scan_replay(msg_trace)
                     decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
                     message_results.append({
