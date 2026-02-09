@@ -254,10 +254,16 @@ CRITICAL INDICATORS OF CONTRADICTION:
 - "I don't actually know..." about something previously stated as fact
 - Self-corrections within the same message ("On second thought...", "Let me clarify...")
 
-Answer "yes" if the assistant contradicts itself (either across messages OR within a single message).
-Answer "no" if the assistant is consistent throughout.
+**NOT contradictions (do NOT flag these):**
+- The assistant notes a prerequisite or dependency is missing, the user resolves it or asks to proceed anyway, and the assistant moves forward. This is normal workflow progression, not a contradiction.
+- The assistant uses a different approach or alternative for one task vs another (e.g., using service A for one task and service B for a similar task) — different strategies are not contradictions.
+- The assistant builds or configures something that references an external service even if that service was previously noted as unavailable — building/configuring vs running/executing are separate steps.
+- The conversation evolves naturally: earlier context changes due to user input, new information, or user decisions. Only flag cases where the assistant contradicts its OWN prior statements without new information from the user.
 
-Provide a clear explanation with specific examples of the contradictions found."""
+Answer "yes" ONLY if the assistant makes directly contradictory factual claims (states X then states not-X about the same thing).
+Answer "no" if the apparent inconsistency can be explained by conversation progression, user decisions, or different contexts.
+
+Provide a clear explanation with specific examples of the contradictions found, referencing assistant message numbers."""
 
             response = self.rails.generate(prompt=check_prompt)
             response_text = str(response).lower()
