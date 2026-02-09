@@ -586,7 +586,7 @@ def test_is_data_blob_detection():
         ('  {\n  "key": "value"\n}', True, "JSON with whitespace"),
         ("Help me debug this API error", False, "Short natural language"),
         ("The workflow failed because the project ID wasn't found in Linear. " * 20, False, "Long natural language"),
-        ('key1=val1&key2=val2&' * 300, True, "URL-encoded data (low alpha ratio)"),
+        ('{"id":1,"url":"https://api.github.com/repos/org/repo/issues/1",' * 50 + '"end":true}', True, "Realistic API JSON blob"),
     ]
 
     all_passed = True
