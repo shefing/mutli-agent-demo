@@ -261,6 +261,47 @@ class DataDisclosureGuardScanner:
                 print(f"   ℹ️  Filtering out IP_ADDRESS '{entity_text}' - in JSON/HTML error response")
                 return True
 
+        # Email address specific filtering — placeholder/example emails
+        if entity_type == "EMAIL_ADDRESS":
+            email_lower = entity_text.lower()
+            local_part, _, domain = email_lower.rpartition("@")
+
+            # Well-known placeholder/example/documentation domains (RFC 2606 + common patterns)
+            placeholder_domains = {
+                "example.com", "example.org", "example.net",
+                "test.com", "test.org",
+                "company.com", "acme.com", "corp.com", "mycompany.com",
+                "domain.com", "placeholder.com", "fake.com",
+                "yourcompany.com", "yourdomain.com", "yourorg.com",
+                "contoso.com",  # Microsoft's placeholder
+                "fabrikam.com",  # Microsoft's placeholder
+                "localhost",
+            }
+            if domain in placeholder_domains:
+                print(f"   ℹ️  Filtering out EMAIL_ADDRESS '{entity_text}' - placeholder domain '{domain}'")
+                return True
+
+            # Role-based local parts that indicate a template, not a real person
+            role_prefixes = [
+                "admin", "support", "info", "help", "team", "noreply",
+                "no-reply", "contact", "sales", "billing", "ops",
+                "devops", "finops", "secops", "engineering", "hr",
+                "alerts", "notifications", "system", "service",
+                "user", "owner", "manager",
+            ]
+            if any(local_part == prefix or local_part.startswith(prefix + "-")
+                   or local_part.endswith("-" + prefix)
+                   for prefix in role_prefixes):
+                # Role-based + generic domain pattern (e.g., finops-team@company.com)
+                # Even on real domains, role addresses in workflow templates are placeholders
+                if any(keyword in context for keyword in [
+                    'workflow', 'alert', 'notification', 'template',
+                    'channel', 'send to', 'notify', 'recipient',
+                    'configure', 'set up', 'replace', 'customize',
+                ]):
+                    print(f"   ℹ️  Filtering out EMAIL_ADDRESS '{entity_text}' - role-based address in template context")
+                    return True
+
         # Phone number specific filtering
         if entity_type == "PHONE_NUMBER":
             # If it looks like a product ID (in URL, has "product" nearby)
