@@ -34,7 +34,8 @@ from multi_agent_demo.alignment_check_new import (
 )
 from multi_agent_demo.core.scanner_runner import (
     ALIGNMENT_EVAL_CONTEXT,
-    check_trace_for_large_messages
+    check_trace_for_large_messages,
+    scan_replay_with_timeout
 )
 
 
@@ -299,14 +300,24 @@ def run_scanner_tests():
                         })
                         continue
 
-                    result = ac_firewall.scan_replay(msg_trace)
-                    decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
-                    message_results.append({
-                        "message_index": msg_idx,
-                        "message_type": "assistant",
-                        "decision": decision,
-                        "reason": result.reason
-                    })
+                    try:
+                        result = scan_replay_with_timeout(ac_firewall, msg_trace)
+                        decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
+                        message_results.append({
+                            "message_index": msg_idx,
+                            "message_type": "assistant",
+                            "decision": decision,
+                            "reason": result.reason
+                        })
+                    except TimeoutError as te:
+                        message_results.append({
+                            "message_index": msg_idx,
+                            "message_type": "assistant",
+                            "decision": "WARNING",
+                            "reason": str(te),
+                            "skipped": True,
+                            "skip_severity": "timeout"
+                        })
 
                 counts = {
                     "safe": sum(1 for r in message_results if r["decision"] == "SAFE"),

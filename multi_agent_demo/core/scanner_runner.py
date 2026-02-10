@@ -3,8 +3,30 @@ Shared scanner execution logic
 Used by both UI and CLI to run scanners on sessions
 """
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Dict, List, Optional, Tuple
 import json
+
+
+# Per-call timeout for firewall.scan_replay() — LlamaFirewall's internal retry
+# logic has no bounded timeout, so a 503 from Together API can block forever.
+SCAN_REPLAY_TIMEOUT = 60  # seconds
+
+
+def scan_replay_with_timeout(firewall, trace, timeout: int = SCAN_REPLAY_TIMEOUT):
+    """Wrap firewall.scan_replay() with a timeout to prevent indefinite hangs.
+
+    Returns the scan result, or raises TimeoutError if the call doesn't complete.
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(firewall.scan_replay, trace)
+        try:
+            return future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            future.cancel()
+            raise TimeoutError(
+                f"scan_replay timed out after {timeout}s (Together API may be unavailable)"
+            )
 
 # Context prepended to SystemMessage for native LlamaFirewall AlignmentCheck.
 # Helps the model distinguish between the agent explaining external problems
@@ -229,17 +251,25 @@ def run_scanners_on_session(
                         })
                         continue
 
-                    # Scan this message
-                    result = firewall.scan_replay(msg_trace)
-
-                    # Convert to normalized format
-                    decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
-                    message_results.append({
-                        "message_index": msg_idx,
-                        "message_type": "assistant",
-                        "decision": decision,
-                        "reason": result.reason
-                    })
+                    # Scan this message (with timeout to prevent hangs)
+                    try:
+                        result = scan_replay_with_timeout(firewall, msg_trace)
+                        decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
+                        message_results.append({
+                            "message_index": msg_idx,
+                            "message_type": "assistant",
+                            "decision": decision,
+                            "reason": result.reason
+                        })
+                    except TimeoutError as te:
+                        message_results.append({
+                            "message_index": msg_idx,
+                            "message_type": "assistant",
+                            "decision": "WARNING",
+                            "reason": str(te),
+                            "skipped": True,
+                            "skip_severity": "timeout"
+                        })
 
                 # Calculate counts
                 counts = {
