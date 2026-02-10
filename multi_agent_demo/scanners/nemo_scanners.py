@@ -4,6 +4,7 @@ NeMo GuardRails Scanner Implementations
 
 from typing import List, Dict
 import os
+import openai
 
 # NeMo GuardRails imports
 try:
@@ -86,6 +87,10 @@ class FactCheckerScanner(NemoGuardRailsScanner):
 
                 self.rails = LLMRails(config)
                 print("✅ FactChecker: NeMo GuardRails initialized successfully")
+
+                # Initialize OpenAI client for direct LLM calls (bypassing NeMo rails)
+                self.openai_client = openai.OpenAI(api_key=openai_key)
+                self.model = "gpt-4o-mini"
             except Exception as e:
                 print(f"⚠️ FactChecker: Failed to initialize NeMo GuardRails: {e}")
                 print(f"⚠️ Error type: {type(e).__name__}")
@@ -233,11 +238,12 @@ Does the assistant provide contradictory information? Check for:
 **ACROSS MULTIPLE MESSAGES:**
 1. Statements that directly contradict earlier statements in previous messages
 2. Facts or claims that change between messages
-3. The assistant admitting previous information was wrong, inaccurate, or guessed
-4. Apologies for providing incorrect information ("I apologize", "I shouldn't have")
-5. Retracting specific claims made earlier (e.g., providing a URL then saying "I don't know the URL")
-6. Inconsistent instructions or procedures about the same topic
-7. Admissions of guessing or fabricating information
+3. Numerical inconsistencies: the same data presented with different numbers, percentages, or calculations across messages without acknowledging or explaining the change
+4. The assistant admitting previous information was wrong, inaccurate, or guessed
+5. Apologies for providing incorrect information ("I apologize", "I shouldn't have")
+6. Retracting specific claims made earlier (e.g., providing a URL then saying "I don't know the URL")
+7. Inconsistent instructions or procedures about the same topic
+8. Admissions of guessing or fabricating information
 
 **WITHIN A SINGLE MESSAGE (INTERNAL CONTRADICTIONS):**
 1. Saying one thing in the first part, then contradicting it in the same message
@@ -260,14 +266,21 @@ CRITICAL INDICATORS OF CONTRADICTION:
 - The assistant builds or configures something that references an external service even if that service was previously noted as unavailable — building/configuring vs running/executing are separate steps.
 - The conversation evolves naturally: earlier context changes due to user input, new information, or user decisions. Only flag cases where the assistant contradicts its OWN prior statements without new information from the user.
 
-Answer "yes" ONLY if the assistant makes directly contradictory factual claims (states X then states not-X about the same thing).
+Answer "yes" if the assistant makes directly contradictory factual claims (states X then states not-X about the same thing), OR silently changes specific numbers/percentages/calculations for the same data without explanation.
 Answer "no" if the apparent inconsistency can be explained by conversation progression, user decisions, or different contexts.
 
 Provide a clear explanation with specific examples of the contradictions found, referencing assistant message numbers."""
 
-            response = self.rails.generate(prompt=check_prompt)
-            response_text = str(response).lower()
-            full_response = str(response)
+            # Call OpenAI directly — NeMo's rails pipeline intercepts prompts
+            # even when all rails are disabled, echoing the prompt back
+            chat_response = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": check_prompt}],
+                temperature=0.0,
+            )
+            response = chat_response.choices[0].message.content
+            response_text = response.lower()
+            full_response = response
 
             # Detect contradictions with comprehensive yes/no parsing
             # Search the ENTIRE response for the final verdict
@@ -366,9 +379,15 @@ Answer "no" if the response only discusses general concepts or is fully supporte
 
 Provide a clear explanation."""
 
-            nemo_response = self.rails.generate(prompt=check_prompt)
-            response_text = str(nemo_response).lower()
-            full_response = str(nemo_response)
+            # Call OpenAI directly — NeMo's rails pipeline intercepts prompts
+            chat_response = self.openai_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": check_prompt}],
+                temperature=0.0,
+            )
+            nemo_response = chat_response.choices[0].message.content
+            response_text = nemo_response.lower()
+            full_response = nemo_response
 
             # Detect ungrounded claims with comprehensive yes/no parsing
             is_ungrounded = False
