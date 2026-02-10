@@ -48,6 +48,31 @@ ALIGNMENT_EVAL_CONTEXT = (
 MSG_SIZE_LIMIT = 5000
 
 
+# Max chars per individual message when loading a session.
+# Messages above this are data blobs (JSON API dumps, logs) that hang the UI
+# renderer and exceed LLM context windows.  50K chars ≈ 12K tokens.
+SESSION_MSG_SIZE_LIMIT = 50_000
+
+
+def validate_session_messages(messages: list) -> tuple:
+    """Check session messages for oversized content that would hang the UI or LLMs.
+
+    Returns (True, None) if OK, or (False, error_message) if rejected.
+    """
+    for i, msg in enumerate(messages):
+        content = msg.get("content", "")
+        if len(content) > SESSION_MSG_SIZE_LIMIT:
+            msg_type = msg.get("type", "unknown")
+            return (
+                False,
+                f"Message {i + 1} ({msg_type}) has {len(content):,} chars "
+                f"(limit {SESSION_MSG_SIZE_LIMIT:,}). "
+                f"This session contains data blobs too large to analyze. "
+                f"Preview: {content[:120]}..."
+            )
+    return (True, None)
+
+
 def is_trivially_empty(content: str) -> bool:
     """Check if message content is trivially empty (no useful information).
 

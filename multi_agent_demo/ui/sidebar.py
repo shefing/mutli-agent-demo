@@ -6,6 +6,7 @@ import streamlit as st
 import json
 from multi_agent_demo.scenarios import get_predefined_scenarios, load_scenario_from_json
 from multi_agent_demo.scanners import NEMO_GUARDRAILS_AVAILABLE, PRESIDIO_AVAILABLE
+from multi_agent_demo.core.scanner_runner import validate_session_messages
 
 
 def _display_scanner_status():
@@ -137,6 +138,9 @@ def render_sidebar():
                     st.error("❌ Invalid JSON: 'messages' field is required")
                 elif "agent_purpose" not in scenario_data:
                     st.error("❌ Invalid JSON: 'agent_purpose' field is required")
+                elif not validate_session_messages(scenario_data["messages"])[0]:
+                    _, err = validate_session_messages(scenario_data["messages"])
+                    st.error(f"❌ Session too large: {err}")
                 else:
                     # Display scenario info
                     scenario_name = scenario_data.get("scenario_name", "Custom Scenario")

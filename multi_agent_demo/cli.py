@@ -17,6 +17,7 @@ import asyncio
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from multi_agent_demo.core import run_scanners_on_session, aggregate_results
+from multi_agent_demo.core.scanner_runner import validate_session_messages
 from multi_agent_demo.reports import generate_markdown_report
 
 
@@ -205,6 +206,13 @@ Available Scanners:
         session_data = load_session_file(session_file)
         if not session_data:
             print_progress(i, len(session_files), session_name, "ERROR")
+            continue
+
+        # Reject sessions with oversized messages (data blobs that hang LLMs)
+        ok, err = validate_session_messages(session_data.get("messages", []))
+        if not ok:
+            print_colored(f"⚠️ Skipping {session_name}: {err}", Colors.YELLOW)
+            print_progress(i, len(session_files), session_name, "SKIPPED")
             continue
 
         # Run scanners with timing

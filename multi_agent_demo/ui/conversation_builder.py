@@ -5,6 +5,7 @@ Conversation builder UI components
 import streamlit as st
 import json
 from datetime import datetime
+from multi_agent_demo.core.scanner_runner import validate_session_messages
 
 
 def render_conversation_builder():
@@ -366,7 +367,10 @@ def _render_control_buttons():
 
                     # Validate the imported data
                     required_fields = ['agent_purpose', 'messages']
-                    if all(field in imported_data for field in required_fields):
+                    ok, err = validate_session_messages(imported_data.get("messages", []))
+                    if not ok:
+                        st.error(f"❌ Session too large: {err}")
+                    elif all(field in imported_data for field in required_fields):
                         st.write("**Preview:**")
                         purpose_preview = imported_data['agent_purpose'][:100]
                         if len(imported_data['agent_purpose']) > 100:
