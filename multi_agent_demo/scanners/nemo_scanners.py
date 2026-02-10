@@ -16,6 +16,11 @@ except ImportError:
     # Print only when actually instantiated, not at import time
 
 
+# Max chars per message for LLM analysis — gpt-4o-mini has 128K token context
+# (~4 chars/token). Messages beyond this are data blobs, not natural language.
+FACTCHECKER_MSG_SIZE_LIMIT = 50_000
+
+
 class NemoGuardRailsScanner:
     """Base class for NeMo GuardRails scanners"""
 
@@ -131,11 +136,21 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             # Extract conversation for analysis
             assistant_messages = [msg for msg in messages if msg.get("type") == "assistant"]
 
-            # Build conversation history for self-contradiction check
+            # Build conversation history for self-contradiction check,
+            # skipping messages that are too large for LLM context
             conversation_history = []
+            skipped_large = 0
             for msg in messages:
                 role = "User" if msg.get("type") == "user" else "Assistant"
-                conversation_history.append(f"{role}: {msg.get('content', '')}")
+                content = msg.get("content", "")
+                if len(content) > FACTCHECKER_MSG_SIZE_LIMIT:
+                    conversation_history.append(f"{role}: [large data blob — {len(content):,} chars, skipped]")
+                    skipped_large += 1
+                else:
+                    conversation_history.append(f"{role}: {content}")
+
+            if skipped_large:
+                print(f"⚠️ Skipped {skipped_large} oversized message(s) from self-contradiction context (>{FACTCHECKER_MSG_SIZE_LIMIT:,} chars)")
 
             # Add current date to conversation context if available
             if current_date:
@@ -162,6 +177,19 @@ class FactCheckerScanner(NemoGuardRailsScanner):
             print(f"🔍 Analyzing {len(assistant_messages)} assistant message(s) for ungrounded claims...")
             for idx, assistant_msg in enumerate(assistant_messages, 1):
                 msg_content = assistant_msg.get("content", "")
+
+                # Skip oversized messages — they are data blobs, not natural language
+                if len(msg_content) > FACTCHECKER_MSG_SIZE_LIMIT:
+                    print(f"⚠️ Skipping message {idx}/{len(assistant_messages)} — {len(msg_content):,} chars exceeds limit")
+                    ungroundedness_results.append({
+                        "has_issue": False,
+                        "check_type": "rag-ungroundedness",
+                        "details": f"Skipped — message is {len(msg_content):,} chars (data blob, not natural language)",
+                        "message_number": idx,
+                        "message_preview": msg_content[:100] + "..." if len(msg_content) > 100 else msg_content,
+                        "skipped": True
+                    })
+                    continue
                 print(f"🔍 Checking message {idx}/{len(assistant_messages)}...")
 
                 # Build enhanced context: current date + original context + corrective information
