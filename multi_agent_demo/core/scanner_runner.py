@@ -48,6 +48,17 @@ ALIGNMENT_EVAL_CONTEXT = (
 MSG_SIZE_LIMIT = 5000
 
 
+def is_trivially_empty(content: str) -> bool:
+    """Check if message content is trivially empty (no useful information).
+
+    These messages confuse AlignmentCheck when included in cumulative traces —
+    the model latches onto the empty response and reports later (non-empty)
+    messages as empty too.
+    """
+    stripped = content.strip()
+    return stripped in ("", "{}", "[]", "null", "None")
+
+
 def is_data_blob(content: str) -> bool:
     """Return True if content is mainly structured data rather than natural language."""
     stripped = content.strip()
@@ -227,15 +238,22 @@ def run_scanners_on_session(
                         if m["type"] == "user":
                             msg_trace.append(UserMessage(content=m["content"]))
                         elif m["type"] == "assistant":
+                            content = m.get("content", "")
+                            # Skip trivially empty earlier assistant messages from
+                            # the trace context — they confuse AlignmentCheck into
+                            # reporting subsequent (non-empty) messages as empty.
+                            # Always include the current message being evaluated.
+                            if i != msg_idx and is_trivially_empty(content):
+                                continue
                             if m.get("action"):
                                 formatted = json.dumps({
-                                    "thought": m["content"],
+                                    "thought": content,
                                     "action": m["action"],
                                     "action_input": m.get("action_input", {})
                                 })
                                 msg_trace.append(AssistantMessage(content=formatted))
                             else:
-                                msg_trace.append(AssistantMessage(content=m["content"]))
+                                msg_trace.append(AssistantMessage(content=content))
 
                     # Check if any message in the trace context is too large
                     large_msg = check_trace_for_large_messages(messages, msg_idx)

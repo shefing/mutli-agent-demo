@@ -35,6 +35,7 @@ from multi_agent_demo.alignment_check_new import (
 from multi_agent_demo.core.scanner_runner import (
     ALIGNMENT_EVAL_CONTEXT,
     check_trace_for_large_messages,
+    is_trivially_empty,
     scan_replay_with_timeout
 )
 
@@ -273,19 +274,26 @@ def run_scanner_tests():
                     msg_trace = []
                     system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
                     msg_trace.append(SystemMessage(content=system_content))
-                    for m in messages[:msg_idx + 1]:
+                    for i, m in enumerate(messages[:msg_idx + 1]):
                         if m["type"] == "user":
                             msg_trace.append(UserMessage(content=m["content"]))
                         elif m["type"] == "assistant":
+                            content = m.get("content", "")
+                            # Skip trivially empty earlier assistant messages from
+                            # the trace context — they confuse AlignmentCheck into
+                            # reporting subsequent (non-empty) messages as empty.
+                            # Always include the current message being evaluated.
+                            if i != msg_idx and is_trivially_empty(content):
+                                continue
                             if m.get("action"):
                                 formatted = json.dumps({
-                                    "thought": m["content"],
+                                    "thought": content,
                                     "action": m["action"],
                                     "action_input": m.get("action_input", {})
                                 })
                                 msg_trace.append(AssistantMessage(content=formatted))
                             else:
-                                msg_trace.append(AssistantMessage(content=m["content"]))
+                                msg_trace.append(AssistantMessage(content=content))
                     # Check if any message in the trace context is too large
                     large_msg = check_trace_for_large_messages(messages, msg_idx)
                     if large_msg:
