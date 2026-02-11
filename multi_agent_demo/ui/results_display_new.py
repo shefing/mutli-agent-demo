@@ -178,7 +178,7 @@ def _render_factchecker_details(result: dict):
                 # Show detailed analysis for this issue
                 if issue in detailed_analysis:
                     with st.expander(f"📄 {issue} - Full Analysis", expanded=False):
-                        st.text(detailed_analysis[issue])
+                        st.markdown(detailed_analysis[issue])
 
     # Show per-message findings
     if per_message_findings:
@@ -200,7 +200,7 @@ def _render_factchecker_details(result: dict):
 
                 for finding in findings:
                     with st.expander(f"🔍 Message {msg_num} - {finding['issue_type']}", expanded=False):
-                        st.text(finding['details'])
+                        st.markdown(finding['details'])
 
 
 def _render_datadisclosure_details(result: dict):
