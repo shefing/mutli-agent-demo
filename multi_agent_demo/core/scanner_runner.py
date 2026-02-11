@@ -135,13 +135,174 @@ def check_trace_for_large_messages(
     return None
 
 
+def _run_alignment_check(messages: List[Dict], purpose: str) -> dict:
+    """Run AlignmentCheck scanner (native LlamaFirewall with GPT-4o-mini fallback)."""
+    try:
+        from llamafirewall import (
+            LlamaFirewall,
+            Role,
+            ScannerType,
+            SystemMessage,
+            UserMessage,
+            AssistantMessage,
+            ScanDecision
+        )
+        import os
+        import logging
+
+        logging.getLogger("llamafirewall").setLevel(logging.ERROR)
+
+        together_key = os.getenv("TOGETHER_API_KEY")
+        if not together_key:
+            raise Exception("TOGETHER_API_KEY not configured, will use fallback")
+
+        scanner_config = {Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT]}
+        firewall = LlamaFirewall(scanner_config)
+
+        assistant_messages = [(i, msg) for i, msg in enumerate(messages) if msg.get("type") == "assistant"]
+
+        if not assistant_messages:
+            return {
+                "scanner": "AlignmentCheck",
+                "overall_decision": "SAFE",
+                "counts": {"safe": 0, "warning": 0, "block": 0, "total": 0},
+                "message_results": [],
+                "reason": "No assistant messages to validate",
+                "method": "native_llamafirewall"
+            }
+
+        message_results = []
+        for msg_idx, msg in assistant_messages:
+            msg_trace = []
+            system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
+            msg_trace.append(SystemMessage(content=system_content))
+
+            for i, m in enumerate(messages[:msg_idx + 1]):
+                if m["type"] == "user":
+                    msg_trace.append(UserMessage(content=m["content"]))
+                elif m["type"] == "assistant":
+                    content = m.get("content", "")
+                    if i != msg_idx and is_trivially_empty(content):
+                        continue
+                    if m.get("action"):
+                        formatted = json.dumps({
+                            "thought": content,
+                            "action": m["action"],
+                            "action_input": m.get("action_input", {})
+                        })
+                        msg_trace.append(AssistantMessage(content=formatted))
+                    else:
+                        msg_trace.append(AssistantMessage(content=content))
+
+            large_msg = check_trace_for_large_messages(messages, msg_idx)
+            if large_msg:
+                severity, reason = large_msg
+                message_results.append({
+                    "message_index": msg_idx,
+                    "message_type": "assistant",
+                    "decision": "WARNING",
+                    "reason": reason,
+                    "skipped": True,
+                    "skip_severity": severity
+                })
+                continue
+
+            try:
+                result = scan_replay_with_timeout(firewall, msg_trace)
+                decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
+                message_results.append({
+                    "message_index": msg_idx,
+                    "message_type": "assistant",
+                    "decision": decision,
+                    "reason": result.reason
+                })
+            except TimeoutError as te:
+                message_results.append({
+                    "message_index": msg_idx,
+                    "message_type": "assistant",
+                    "decision": "WARNING",
+                    "reason": str(te),
+                    "skipped": True,
+                    "skip_severity": "timeout"
+                })
+
+        counts = {
+            "safe": sum(1 for r in message_results if r["decision"] == "SAFE"),
+            "warning": sum(1 for r in message_results if r["decision"] == "WARNING"),
+            "block": sum(1 for r in message_results if r["decision"] == "BLOCK"),
+            "total": len(message_results)
+        }
+        overall_decision = "BLOCK" if counts["block"] > 0 else "WARNING" if counts["warning"] > 0 else "SAFE"
+
+        return {
+            "scanner": "AlignmentCheck",
+            "overall_decision": overall_decision,
+            "counts": counts,
+            "message_results": message_results,
+            "method": "native_llamafirewall"
+        }
+
+    except Exception as e:
+        print(f"⚠️ Native LlamaFirewall failed: {str(e)}, using GPT-4o-mini fallback...")
+        try:
+            from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
+            result = scan_alignment_check_per_message(messages=messages, purpose=purpose)
+            if isinstance(result, dict):
+                result["method"] = "gpt4o_mini_fallback"
+            return result
+        except Exception as fallback_error:
+            return {"error": f"Native failed: {str(e)}, Fallback failed: {str(fallback_error)}"}
+
+
+def _run_prompt_guard(messages: List[Dict]) -> dict:
+    """Run PromptGuard scanner."""
+    try:
+        from multi_agent_demo.alignment_check_new import scan_prompt_guard_per_message
+        return scan_prompt_guard_per_message(messages=messages)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _run_facts_checker(messages: List[Dict], purpose: str) -> dict:
+    """Run FactsChecker scanner."""
+    try:
+        from multi_agent_demo.scanners import FactCheckerScanner, NEMO_GUARDRAILS_AVAILABLE
+
+        if NEMO_GUARDRAILS_AVAILABLE:
+            scanner = FactCheckerScanner()
+            from datetime import datetime
+            current_date = datetime.now().strftime("%B %d, %Y")
+            return scanner.scan(messages, context=purpose, current_date=current_date)
+        else:
+            return {"error": "NeMo GuardRails not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _run_data_disclosure_guard(messages: List[Dict], purpose: str) -> dict:
+    """Run DataDisclosureGuard scanner."""
+    try:
+        from multi_agent_demo.scanners import DataDisclosureGuardScanner, PRESIDIO_AVAILABLE
+
+        if PRESIDIO_AVAILABLE:
+            scanner = DataDisclosureGuardScanner()
+            return scanner.scan(messages, purpose)
+        else:
+            return {"error": "Presidio not available"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def run_scanners_on_session(
     session_data: dict,
     enabled_scanners: List[str],
     agent_config: Optional[dict] = None
 ) -> dict:
     """
-    Run enabled scanners on a single session (CLI-compatible, no Streamlit dependency)
+    Run enabled scanners on a single session in parallel (CLI-compatible, no Streamlit dependency).
+
+    All scanners are independent (no data dependencies between them), so they run
+    concurrently via ThreadPoolExecutor for ~4x speedup on multi-scanner sessions.
 
     Args:
         session_data: Session JSON with messages and purpose/agent_purpose
@@ -150,28 +311,12 @@ def run_scanners_on_session(
 
     Returns:
         dict with scanner results
-
-    Supported session formats:
-        Format 1 (Langfuse export):
-        {
-          "scenario_name": "...",
-          "agent_purpose": "...",
-          "messages": [...]
-        }
-
-        Format 2 (Simple):
-        {
-          "session_id": "...",
-          "purpose": "...",
-          "messages": [...]
-        }
     """
-    # Extract conversation and purpose from session data
-    # Support both "agent_purpose" (Langfuse) and "purpose" (simple format)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     messages = session_data.get("messages", [])
     purpose = session_data.get("agent_purpose") or session_data.get("purpose", "")
 
-    # Build agent config
     if not agent_config:
         agent_config = {
             "name": session_data.get("agent_name", "Agent"),
@@ -179,227 +324,51 @@ def run_scanners_on_session(
             "purpose": purpose
         }
 
-    # Initialize results
     results = {
         "alignment_check": None,
         "prompt_guard": None,
         "nemo_results": {}
     }
 
-    # Run AlignmentCheck (try native LlamaFirewall first, fallback to GPT-4o-mini)
-    if "AlignmentCheck" in enabled_scanners:
+    # Submit all enabled scanners to run in parallel
+    futures = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        if "AlignmentCheck" in enabled_scanners:
+            futures[executor.submit(_run_alignment_check, messages, purpose)] = "alignment_check"
+
+        if "PromptGuard" in enabled_scanners:
+            futures[executor.submit(_run_prompt_guard, messages)] = "prompt_guard"
+
+        if "FactsChecker" in enabled_scanners or "FactChecker" in enabled_scanners:
+            futures[executor.submit(_run_facts_checker, messages, purpose)] = "FactsChecker"
+
+        if "DataDisclosureGuard" in enabled_scanners:
+            futures[executor.submit(_run_data_disclosure_guard, messages, purpose)] = "DataDisclosureGuard"
+
+        # Collect results as they complete (wait up to 10 min for all scanners)
         try:
-            # Try native LlamaFirewall first
-            from llamafirewall import (
-                LlamaFirewall,
-                Role,
-                ScannerType,
-                SystemMessage,
-                UserMessage,
-                AssistantMessage,
-                ScanDecision
-            )
-            import os
-            import logging
-
-            # Suppress noisy LlamaFirewall warnings about SystemMessage in trace
-            # (fires for each non-UserMessage before finding the first UserMessage)
-            logging.getLogger("llamafirewall").setLevel(logging.ERROR)
-
-            # Check if TOGETHER_API_KEY is configured
-            together_key = os.getenv("TOGETHER_API_KEY")
-            if not together_key:
-                raise Exception("TOGETHER_API_KEY not configured, will use fallback")
-
-            # Initialize native LlamaFirewall
-            scanner_config = {Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT]}
-            firewall = LlamaFirewall(scanner_config)
-
-            # Build trace from messages
-            # Use SystemMessage for agent purpose so that AlignmentCheck
-            # picks the first real UserMessage as the goal to evaluate against
-            trace = []
-            system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
-            trace.append(SystemMessage(content=system_content))
-
-            for msg in messages:
-                if msg["type"] == "user":
-                    trace.append(UserMessage(content=msg["content"]))
-                elif msg["type"] == "assistant":
-                    if msg.get("action"):
-                        # Format as action
-                        formatted = json.dumps({
-                            "thought": msg["content"],
-                            "action": msg["action"],
-                            "action_input": msg.get("action_input", {})
-                        })
-                        trace.append(AssistantMessage(content=formatted))
+            for future in as_completed(futures, timeout=600):
+                key = futures[future]
+                try:
+                    result = future.result()
+                    if key in ("alignment_check", "prompt_guard"):
+                        results[key] = result
                     else:
-                        trace.append(AssistantMessage(content=msg["content"]))
-
-            # Validate each assistant message individually for granular results
-            assistant_messages = [(i, msg) for i, msg in enumerate(messages) if msg.get("type") == "assistant"]
-
-            if not assistant_messages:
-                results["alignment_check"] = {
-                    "scanner": "AlignmentCheck",
-                    "overall_decision": "SAFE",
-                    "counts": {"safe": 0, "warning": 0, "block": 0, "total": 0},
-                    "message_results": [],
-                    "reason": "No assistant messages to validate",
-                    "method": "native_llamafirewall"
-                }
-            else:
-                # Per-message validation using native LlamaFirewall
-                message_results = []
-
-                for msg_idx, msg in assistant_messages:
-                    # Build trace up to and including this message
-                    msg_trace = []
-                    system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
-                    msg_trace.append(SystemMessage(content=system_content))
-
-                    for i, m in enumerate(messages[:msg_idx + 1]):
-                        if m["type"] == "user":
-                            msg_trace.append(UserMessage(content=m["content"]))
-                        elif m["type"] == "assistant":
-                            content = m.get("content", "")
-                            # Skip trivially empty earlier assistant messages from
-                            # the trace context — they confuse AlignmentCheck into
-                            # reporting subsequent (non-empty) messages as empty.
-                            # Always include the current message being evaluated.
-                            if i != msg_idx and is_trivially_empty(content):
-                                continue
-                            if m.get("action"):
-                                formatted = json.dumps({
-                                    "thought": content,
-                                    "action": m["action"],
-                                    "action_input": m.get("action_input", {})
-                                })
-                                msg_trace.append(AssistantMessage(content=formatted))
-                            else:
-                                msg_trace.append(AssistantMessage(content=content))
-
-                    # Check if any message in the trace context is too large
-                    large_msg = check_trace_for_large_messages(messages, msg_idx)
-                    if large_msg:
-                        severity, reason = large_msg
-                        message_results.append({
-                            "message_index": msg_idx,
-                            "message_type": "assistant",
-                            "decision": "WARNING",
-                            "reason": reason,
-                            "skipped": True,
-                            "skip_severity": severity
-                        })
-                        continue
-
-                    # Scan this message (with timeout to prevent hangs)
-                    try:
-                        result = scan_replay_with_timeout(firewall, msg_trace)
-                        decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
-                        message_results.append({
-                            "message_index": msg_idx,
-                            "message_type": "assistant",
-                            "decision": decision,
-                            "reason": result.reason
-                        })
-                    except TimeoutError as te:
-                        message_results.append({
-                            "message_index": msg_idx,
-                            "message_type": "assistant",
-                            "decision": "WARNING",
-                            "reason": str(te),
-                            "skipped": True,
-                            "skip_severity": "timeout"
-                        })
-
-                # Calculate counts
-                counts = {
-                    "safe": sum(1 for r in message_results if r["decision"] == "SAFE"),
-                    "warning": sum(1 for r in message_results if r["decision"] == "WARNING"),
-                    "block": sum(1 for r in message_results if r["decision"] == "BLOCK"),
-                    "total": len(message_results)
-                }
-
-                # Determine overall decision
-                if counts["block"] > 0:
-                    overall_decision = "BLOCK"
-                elif counts["warning"] > 0:
-                    overall_decision = "WARNING"
-                else:
-                    overall_decision = "SAFE"
-
-                results["alignment_check"] = {
-                    "scanner": "AlignmentCheck",
-                    "overall_decision": overall_decision,
-                    "counts": counts,
-                    "message_results": message_results,
-                    "method": "native_llamafirewall"
-                }
-
-        except Exception as e:
-            # Fall back to GPT-4o-mini implementation
-            print(f"⚠️ Native LlamaFirewall failed: {str(e)}, using GPT-4o-mini fallback...")
-            try:
-                from multi_agent_demo.alignment_check_new import scan_alignment_check_per_message
-                results["alignment_check"] = scan_alignment_check_per_message(
-                    messages=messages,
-                    purpose=purpose
-                )
-                # Mark as fallback
-                if isinstance(results["alignment_check"], dict):
-                    results["alignment_check"]["method"] = "gpt4o_mini_fallback"
-            except Exception as fallback_error:
-                results["alignment_check"] = {"error": f"Native failed: {str(e)}, Fallback failed: {str(fallback_error)}"}
-
-    # Run PromptGuard
-    if "PromptGuard" in enabled_scanners:
-        try:
-            from multi_agent_demo.alignment_check_new import scan_prompt_guard_per_message
-            results["prompt_guard"] = scan_prompt_guard_per_message(
-                messages=messages
-            )
-        except Exception as e:
-            results["prompt_guard"] = {"error": str(e)}
-
-    # Run FactsChecker
-    if "FactsChecker" in enabled_scanners or "FactChecker" in enabled_scanners:
-        try:
-            # Lazy import - only load NeMo when needed
-            from multi_agent_demo.scanners import FactCheckerScanner, NEMO_GUARDRAILS_AVAILABLE
-
-            if NEMO_GUARDRAILS_AVAILABLE:
-                scanner = FactCheckerScanner()
-                # Pass today's date for temporal context
-                from datetime import datetime
-                current_date = datetime.now().strftime("%B %d, %Y")  # e.g., "February 07, 2026"
-                # Use explicit keyword arg 'context' to match method signature
-                result = scanner.scan(messages, context=purpose, current_date=current_date)
-                results["nemo_results"]["FactsChecker"] = result
-            else:
-                results["nemo_results"]["FactsChecker"] = {
-                    "error": "NeMo GuardRails not available"
-                }
-        except Exception as e:
-            results["nemo_results"]["FactsChecker"] = {"error": str(e)}
-
-    # Run DataDisclosureGuard
-    if "DataDisclosureGuard" in enabled_scanners:
-        try:
-            # Lazy import - only load Presidio when needed
-            from multi_agent_demo.scanners import DataDisclosureGuardScanner, PRESIDIO_AVAILABLE
-
-            if PRESIDIO_AVAILABLE:
-                scanner = DataDisclosureGuardScanner()
-                result = scanner.scan(messages, purpose)
-                results["nemo_results"]["DataDisclosureGuard"] = result
-            else:
-                results["nemo_results"]["DataDisclosureGuard"] = {
-                    "error": "Presidio not available"
-                }
-        except Exception as e:
-            results["nemo_results"]["DataDisclosureGuard"] = {"error": str(e)}
+                        results["nemo_results"][key] = result
+                except Exception as e:
+                    if key in ("alignment_check", "prompt_guard"):
+                        results[key] = {"error": str(e)}
+                    else:
+                        results["nemo_results"][key] = {"error": str(e)}
+        except FuturesTimeoutError:
+            # Some scanners didn't finish — report timeout for unfinished ones
+            for future, key in futures.items():
+                if not future.done():
+                    error = {"error": "Scanner timed out (600s)"}
+                    if key in ("alignment_check", "prompt_guard"):
+                        results[key] = error
+                    else:
+                        results["nemo_results"][key] = error
 
     return results
 
