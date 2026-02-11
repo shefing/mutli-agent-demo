@@ -19,6 +19,22 @@ def render():
     # Render sidebar with scanner configuration and scenario selection
     render_sidebar()
 
+    # Prevent wide content (tables, JSON, code blocks) in the conversation panel
+    # from overflowing into the results panel — clip with horizontal scrollbar
+    st.markdown("""
+        <style>
+        /* Left column: clip overflow so wide tables/code get a scrollbar */
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
+            overflow-x: auto;
+        }
+        /* Right column: render above any residual overflow */
+        [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+            position: relative;
+            z-index: 10;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # Main content area with two columns
     col1, col2 = st.columns([3, 2])
 

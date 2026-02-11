@@ -298,7 +298,8 @@ CRITICAL INDICATORS OF CONTRADICTION:
 Answer "yes" if the assistant makes directly contradictory factual claims (states X then states not-X about the same thing), OR silently changes specific numbers/percentages/calculations for the same data without explanation.
 Answer "no" if the apparent inconsistency can be explained by conversation progression, user decisions, or different contexts.
 
-Provide a clear explanation with specific examples of the contradictions found, referencing assistant message numbers."""
+Provide a clear explanation with specific examples of the contradictions found, referencing assistant message numbers.
+FORMATTING: When quoting text from the conversation, always wrap the quoted text in backtick code spans (e.g., `quoted text here`). Your own analysis sentences should use normal markdown."""
 
             # Call OpenAI directly — NeMo's rails pipeline intercepts prompts
             # even when all rails are disabled, echoing the prompt back
@@ -406,7 +407,8 @@ An UNGROUNDED CLAIM is:
 Answer "yes" if the response contains ungrounded claims (makes specific assertions without evidence support).
 Answer "no" if the response only discusses general concepts or is fully supported by provided evidence.
 
-Provide a clear explanation."""
+Provide a clear explanation.
+FORMATTING: When quoting text from the conversation, always wrap the quoted text in backtick code spans (e.g., `quoted text here`). Your own analysis sentences should use normal markdown."""
 
             # Call OpenAI directly — NeMo's rails pipeline intercepts prompts
             chat_response = self.openai_client.chat.completions.create(
