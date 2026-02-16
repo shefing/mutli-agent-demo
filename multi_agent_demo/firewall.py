@@ -34,9 +34,11 @@ from multi_agent_demo.alignment_check_new import (
 )
 from multi_agent_demo.core.scanner_runner import (
     ALIGNMENT_EVAL_CONTEXT,
+    ALIGNMENT_PARALLEL_THRESHOLD,
     check_trace_for_large_messages,
     is_trivially_empty,
-    scan_replay_with_timeout
+    scan_replay_with_timeout,
+    _scan_single_message
 )
 
 
@@ -214,18 +216,20 @@ def test_alignment_check(firewall, trace: Trace, messages: List[Dict] = None, pu
 
 
 def _ui_run_alignment_check(messages, purpose):
-    """Run AlignmentCheck for UI path (thread-safe, no Streamlit calls)."""
+    """Run AlignmentCheck for UI path (thread-safe, no Streamlit calls).
+
+    Delegates to the shared _scan_single_message helper. For sessions with
+    >= ALIGNMENT_PARALLEL_THRESHOLD assistant messages, scans run in parallel.
+    """
     try:
         import os
         import logging
+        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
         logging.getLogger("llamafirewall").setLevel(logging.ERROR)
 
         together_key = os.getenv("TOGETHER_API_KEY")
         if not together_key:
             raise Exception("TOGETHER_API_KEY not configured")
-
-        scanner_config = {Role.ASSISTANT: [ScannerType.AGENT_ALIGNMENT]}
-        ac_firewall = LlamaFirewall(scanner_config)
 
         assistant_messages = [(i, msg) for i, msg in enumerate(messages) if msg.get("type") == "assistant"]
         if not assistant_messages:
@@ -237,59 +241,45 @@ def _ui_run_alignment_check(messages, purpose):
                 "method": "native_llamafirewall"
             }
 
-        message_results = []
-        for msg_idx, msg in assistant_messages:
-            msg_trace = []
-            system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
-            msg_trace.append(SystemMessage(content=system_content))
-            for i, m in enumerate(messages[:msg_idx + 1]):
-                if m["type"] == "user":
-                    msg_trace.append(UserMessage(content=m["content"]))
-                elif m["type"] == "assistant":
-                    content = m.get("content", "")
-                    if i != msg_idx and is_trivially_empty(content):
-                        continue
-                    if m.get("action"):
-                        formatted = json.dumps({
-                            "thought": content,
-                            "action": m["action"],
-                            "action_input": m.get("action_input", {})
-                        })
-                        msg_trace.append(AssistantMessage(content=formatted))
-                    else:
-                        msg_trace.append(AssistantMessage(content=content))
+        if len(assistant_messages) >= ALIGNMENT_PARALLEL_THRESHOLD:
+            message_results = []
+            futures = {}
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                for msg_idx, msg in assistant_messages:
+                    future = executor.submit(_scan_single_message, messages, msg_idx, purpose)
+                    futures[future] = msg_idx
 
-            large_msg = check_trace_for_large_messages(messages, msg_idx)
-            if large_msg:
-                severity, reason = large_msg
-                message_results.append({
-                    "message_index": msg_idx,
-                    "message_type": "assistant",
-                    "decision": "WARNING",
-                    "reason": reason,
-                    "skipped": True,
-                    "skip_severity": severity
-                })
-                continue
+                try:
+                    for future in as_completed(futures, timeout=600):
+                        try:
+                            message_results.append(future.result())
+                        except Exception as e:
+                            msg_idx = futures[future]
+                            message_results.append({
+                                "message_index": msg_idx,
+                                "message_type": "assistant",
+                                "decision": "WARNING",
+                                "reason": str(e),
+                                "skipped": True,
+                                "skip_severity": "error"
+                            })
+                except FuturesTimeout:
+                    for future, msg_idx in futures.items():
+                        if not future.done():
+                            message_results.append({
+                                "message_index": msg_idx,
+                                "message_type": "assistant",
+                                "decision": "WARNING",
+                                "reason": "AlignmentCheck per-message scan timed out (600s)",
+                                "skipped": True,
+                                "skip_severity": "timeout"
+                            })
 
-            try:
-                result = scan_replay_with_timeout(ac_firewall, msg_trace)
-                decision = "SAFE" if result.decision == ScanDecision.ALLOW else "BLOCK"
-                message_results.append({
-                    "message_index": msg_idx,
-                    "message_type": "assistant",
-                    "decision": decision,
-                    "reason": result.reason
-                })
-            except TimeoutError as te:
-                message_results.append({
-                    "message_index": msg_idx,
-                    "message_type": "assistant",
-                    "decision": "WARNING",
-                    "reason": str(te),
-                    "skipped": True,
-                    "skip_severity": "timeout"
-                })
+            message_results.sort(key=lambda r: r["message_index"])
+        else:
+            message_results = []
+            for msg_idx, msg in assistant_messages:
+                message_results.append(_scan_single_message(messages, msg_idx, purpose))
 
         counts = {
             "safe": sum(1 for r in message_results if r["decision"] == "SAFE"),
