@@ -224,6 +224,29 @@ class DataDisclosureGuardScanner:
                 print(f"   ℹ️  Filtering out {entity_type} '{entity_text}' - found technical context: '{indicator}'")
                 return True
 
+        # Check if this numeric entity is a JSON field value (e.g., "someField": 703764369)
+        # Filter it out UNLESS the field name itself indicates PII
+        if entity_type in ["US_SSN", "US_PASSPORT", "US_BANK_NUMBER", "PHONE_NUMBER"]:
+            import re
+            pre_start = max(0, entity["start"] - 80)
+            preceding = text[pre_start:entity["start"]]
+            # Match "fieldName": or "fieldName" : and capture the field name
+            m = re.search(r'"([a-zA-Z_][a-zA-Z0-9_]*)"\s*:\s*"?-?\s*$', preceding)
+            if m:
+                field_name = m.group(1).lower()
+                # Field names that genuinely hold PII — let these through
+                pii_field_names = {
+                    "ssn", "social_security", "socialsecurity", "socialsecuritynumber",
+                    "phone", "phonenumber", "phone_number", "mobile", "cell",
+                    "passport", "passportnumber", "passport_number",
+                    "bank_account", "bankaccount", "account_number", "accountnumber",
+                    "routing", "routing_number", "routingnumber",
+                    "itin", "taxpayer",
+                }
+                if field_name not in pii_field_names:
+                    print(f"   ℹ️  Filtering out {entity_type} '{entity_text}' - value of JSON field \"{m.group(1)}\"")
+                    return True
+
         # Check if inside a URL (common for product IDs)
         if 'http://' in context or 'https://' in context:
             # Check if entity is part of URL path or query string

@@ -10,7 +10,16 @@ This script tests the scenario that previously generated false positives:
 """
 
 import json
-from multi_agent_demo.scanners.data_disclosure_scanner import DataDisclosureGuardScanner
+import importlib.util
+
+# Direct import to avoid pulling in nemo_scanners (needs openai)
+_spec = importlib.util.spec_from_file_location(
+    "data_disclosure_scanner",
+    "multi_agent_demo/scanners/data_disclosure_scanner.py"
+)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+DataDisclosureGuardScanner = _mod.DataDisclosureGuardScanner
 
 
 def test_h_and_m_scenario():
@@ -58,6 +67,10 @@ def test_h_and_m_scenario():
     # Initialize scanner
     scanner = DataDisclosureGuardScanner()
 
+    if not scanner.presidio_available:
+        print("⚠️  Presidio not installed — skipping H&M full-scan test")
+        return None  # skip
+
     print(f"Scenario: {len(messages)} messages")
     print(f"Purpose: {purpose}")
     print("\nRunning DataDisclosureGuard scan...")
@@ -98,8 +111,116 @@ def test_h_and_m_scenario():
         return False
 
 
+def test_json_field_value_filtering():
+    """Test that numeric values in JSON fields are filtered unless the field name indicates PII"""
+    print("\nTesting JSON field-value filtering...")
+    print("=" * 80)
+
+    scanner = DataDisclosureGuardScanner()
+
+    # Helper: build a synthetic entity dict at the right position within text
+    def make_entity(text, value, entity_type):
+        start = text.index(value)
+        return {"text": value, "type": entity_type, "start": start, "end": start + len(value)}
+
+    passed = 0
+    failed = 0
+
+    # --- Cases that SHOULD be filtered (technical JSON data, not PII) ---
+    filter_cases = [
+        # SAST-style structured data
+        ('{"similarityId": "703764369", "status": "NEW"}', "703764369", "US_SSN",
+         "SAST similarityId"),
+        ('{"similarityId": "-1325423813", "state": "TO_VERIFY"}', "1325423813", "US_SSN",
+         "negative similarityId (digits only)"),
+        ('{"queryId": 14171746259763180000, "queryName": "Stored_Path_Traversal"}', "14171746259763180000", "PHONE_NUMBER",
+         "SAST queryId"),
+        # Generic application IDs
+        ('{"orderId": "123456789", "total": 59.99}', "123456789", "US_SSN",
+         "orderId"),
+        ('{"transactionRef": "987654321", "status": "complete"}', "987654321", "US_PASSPORT",
+         "transactionRef"),
+        ('{"invoiceNumber": "112233445", "amount": 100}', "112233445", "US_BANK_NUMBER",
+         "invoiceNumber"),
+        ('{"correlationId": "5551234567", "service": "api"}', "5551234567", "PHONE_NUMBER",
+         "correlationId"),
+        ('{"resultHash": "770711062", "algo": "sha1"}', "770711062", "US_SSN",
+         "resultHash"),
+    ]
+
+    for text, value, entity_type, label in filter_cases:
+        entity = make_entity(text, value, entity_type)
+        result = scanner._is_technical_context(text, entity)
+        if result:
+            print(f"  ✅ Filtered {entity_type} in {label}")
+            passed += 1
+        else:
+            print(f"  ❌ FAILED to filter {entity_type} in {label}")
+            failed += 1
+
+    # --- Cases that should NOT be filtered (real PII in JSON) ---
+    keep_cases = [
+        ('{"ssn": "123456789", "name": "John"}', "123456789", "US_SSN",
+         "ssn field (real PII)"),
+        ('{"phone": "5551234567", "name": "Jane"}', "5551234567", "PHONE_NUMBER",
+         "phone field (real PII)"),
+        ('{"passport": "987654321", "country": "US"}', "987654321", "US_PASSPORT",
+         "passport field (real PII)"),
+        ('{"bank_account": "123456789012", "routing": "021000021"}', "123456789012", "US_BANK_NUMBER",
+         "bank_account field (real PII)"),
+        ('{"phone_number": "2025551234", "type": "mobile"}', "2025551234", "PHONE_NUMBER",
+         "phone_number field (real PII)"),
+    ]
+
+    for text, value, entity_type, label in keep_cases:
+        entity = make_entity(text, value, entity_type)
+        result = scanner._is_technical_context(text, entity)
+        if not result:
+            print(f"  ✅ Kept {entity_type} in {label}")
+            passed += 1
+        else:
+            print(f"  ❌ FAILED — incorrectly filtered {entity_type} in {label}")
+            failed += 1
+
+    # --- Cases that should NOT be filtered (plain text PII, not JSON) ---
+    plain_cases = [
+        ("My SSN is 123456789 and I need help", "123456789", "US_SSN",
+         "plain text SSN"),
+        ("Call me at 5551234567 please", "5551234567", "PHONE_NUMBER",
+         "plain text phone"),
+        ("Passport number 987654321", "987654321", "US_PASSPORT",
+         "plain text passport"),
+    ]
+
+    for text, value, entity_type, label in plain_cases:
+        entity = make_entity(text, value, entity_type)
+        result = scanner._is_technical_context(text, entity)
+        if not result:
+            print(f"  ✅ Kept {entity_type} in {label}")
+            passed += 1
+        else:
+            print(f"  ❌ FAILED — incorrectly filtered {entity_type} in {label}")
+            failed += 1
+
+    total = passed + failed
+    print(f"\nJSON field-value filtering: {passed}/{total} passed")
+    return failed == 0, passed, total
+
+
 if __name__ == "__main__":
-    success = test_h_and_m_scenario()
-    passed = 1 if success else 0
-    print(f"TEST_COUNTS:{passed}/1")
-    exit(0 if success else 1)
+    results = []
+
+    success1 = test_h_and_m_scenario()
+    if success1 is None:
+        hm_passed, hm_total = 0, 0  # skipped
+    else:
+        results.append(success1)
+        hm_passed, hm_total = (1 if success1 else 0), 1
+
+    success2, json_passed, json_total = test_json_field_value_filtering()
+    results.append(success2)
+
+    total_passed = hm_passed + json_passed
+    total_tests = hm_total + json_total
+    print(f"\nTEST_COUNTS:{total_passed}/{total_tests}")
+    exit(0 if all(results) else 1)
