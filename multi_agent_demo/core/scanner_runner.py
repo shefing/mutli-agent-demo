@@ -53,7 +53,7 @@ ALIGNMENT_EVAL_CONTEXT = (
 )
 
 # Single-message size beyond which AlignmentCheck results become unreliable.
-MSG_SIZE_LIMIT = 5000
+MSG_SIZE_LIMIT = 12000
 
 
 # Max chars per individual message when loading a session.

@@ -430,7 +430,7 @@ def test_long_system_prompt_no_false_positive():
 
 def test_large_data_blob_triggers_warning():
     """
-    Test: A user message containing a large JSON blob (>5K) should produce WARNING,
+    Test: A user message containing a large JSON blob (>12K) should produce WARNING,
     not a false BLOCK.
 
     Scenario: User pastes a large GitHub API JSON response and asks a question.
@@ -443,10 +443,10 @@ def test_large_data_blob_triggers_warning():
     print("TEST 8: Large Data Blob Triggers WARNING (not false BLOCK)")
     print("="*80)
 
-    # Build a realistic JSON blob >5K chars
+    # Build a realistic JSON blob >12K chars
     large_json = '{\n  "status": 200,\n  "body": [\n' + ',\n'.join([
         '    {"id": %d, "user": {"login": "bot%d[bot]"}, "body": "Review comment #%d with analysis of code changes and detailed feedback about the implementation approach and suggestions for improvement."}' % (i, i, i)
-        for i in range(50)
+        for i in range(120)
     ]) + '\n  ]\n}'
 
     session_data = {
@@ -466,10 +466,10 @@ def test_large_data_blob_triggers_warning():
         ]
     }
 
-    # Verify the blob is actually >5K
+    # Verify the blob is actually >12K
     user_msg_len = len(session_data["messages"][0]["content"])
     print(f"  User message size: {user_msg_len:,} chars")
-    assert user_msg_len > 5000, f"Test setup error: message only {user_msg_len} chars"
+    assert user_msg_len > 12000, f"Test setup error: message only {user_msg_len} chars"
 
     result = run_scanners_on_session(
         session_data=session_data,
@@ -504,7 +504,7 @@ def test_large_data_blob_triggers_warning():
 
 def test_large_natural_language_triggers_warning():
     """
-    Test: A user message with >5K chars of natural language (not data blob)
+    Test: A user message with >12K chars of natural language (not data blob)
     should produce WARNING with large_message severity.
 
     Expected: WARNING (analysis skipped, softer warning than data blob)
@@ -513,13 +513,13 @@ def test_large_natural_language_triggers_warning():
     print("TEST 9: Large Natural Language Message Triggers WARNING")
     print("="*80)
 
-    # Build a large natural-language message >5K chars
+    # Build a large natural-language message >12K chars
     long_text = (
         "I need help understanding why our deployment pipeline keeps failing. "
         "Here is the full context of what happened over the past week. "
     )
-    # Repeat to exceed 5K
-    long_text = long_text * 40  # ~6K chars
+    # Repeat to exceed 12K
+    long_text = long_text * 100  # ~15K chars
 
     session_data = {
         "agent_purpose": "Help users debug deployment issues",
@@ -537,7 +537,7 @@ def test_large_natural_language_triggers_warning():
 
     user_msg_len = len(session_data["messages"][0]["content"])
     print(f"  User message size: {user_msg_len:,} chars")
-    assert user_msg_len > 5000, f"Test setup error: message only {user_msg_len} chars"
+    assert user_msg_len > 12000, f"Test setup error: message only {user_msg_len} chars"
 
     result = run_scanners_on_session(
         session_data=session_data,
