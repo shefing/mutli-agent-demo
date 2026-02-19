@@ -27,21 +27,21 @@ jobs:
     - name: Install dependencies
       run: |
         # uv is 10-100x faster than pip for package resolution and installation
-        # Pin huggingface_hub: llamafirewall imports HfFolder which was removed in >=0.25
-        uv pip install --system "huggingface_hub<0.25.0"
         uv pip install --system -r requirements_minimal.txt llamafirewall
 
         # Fix NeMo GuardRails + OpenAI compatibility issue
         uv pip install --system nemoguardrails presidio-analyzer presidio-anonymizer
 
-        # Force compatible langchain and openai versions (single command)
-        # nemoguardrails pulls langchain 1.x which is incompatible with 0.2.x sub-packages
+        # Force compatible versions AFTER all installs (later installs can upgrade deps)
+        # - nemoguardrails pulls langchain 1.x which is incompatible with 0.2.x sub-packages
+        # - huggingface_hub >=0.25 removed HfFolder which llamafirewall still imports
         uv pip install --system --reinstall --no-deps \
           "openai==1.54.0" \
           "langchain==0.2.16" \
           "langchain-core==0.2.43" \
           "langchain-community==0.2.16" \
-          "langchain-openai==0.1.25"
+          "langchain-openai==0.1.25" \
+          "huggingface_hub==0.24.0"
         uv pip install --system tiktoken "httpx<0.28.0"
 
         # Verify versions and compatibility
