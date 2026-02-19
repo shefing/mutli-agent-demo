@@ -644,7 +644,8 @@ def test_focused_trace_no_cross_contamination():
                     '  }\n'
                     ']\n\n'
                     "## SCA CVE List\n\n"
-                    "CVE-2018-1002205, CVE-2021-24112\n\n"
+                    "CVE-2018-1002205 (DotNetZip - Zip Slip path traversal)\n"
+                    "CVE-2021-24112 (System.Drawing - Remote Code Execution)\n\n"
                     "Analyze all (SAST, CVE) pairs for exploit chains."
                 )
             },
