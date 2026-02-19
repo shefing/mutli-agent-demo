@@ -27,6 +27,8 @@ jobs:
     - name: Install dependencies
       run: |
         # uv is 10-100x faster than pip for package resolution and installation
+        # Pin huggingface_hub: llamafirewall imports HfFolder which was removed in >=0.25
+        uv pip install --system "huggingface_hub<0.25.0"
         uv pip install --system -r requirements_minimal.txt llamafirewall
 
         # Fix NeMo GuardRails + OpenAI compatibility issue
