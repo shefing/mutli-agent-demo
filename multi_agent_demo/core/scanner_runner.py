@@ -170,19 +170,42 @@ def _scan_single_message(messages: List[Dict], msg_idx: int, purpose: str) -> di
             "skip_severity": severity
         }
 
-    # Build focused trace: all user messages up to this point + only the
-    # single assistant message being evaluated.  Excluding other assistant
-    # messages prevents the model from conflating a prior bad response with
-    # the one under review.
+    # Build trace: include all user messages + the assistant message being
+    # evaluated.  Prior assistant messages are included ONLY when a user
+    # turn sits between them and the target (indicating the user's follow-up
+    # may reference the prior assistant's response).  Consecutive assistant
+    # messages with no intervening user turn are independent responses to
+    # the same request — including them causes cross-contamination.
     msg_trace = []
     system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
     msg_trace.append(SystemMessage(content=system_content))
 
+    # Determine which prior assistant messages to include: only those
+    # followed by a user message before the target.
+    has_user_after = set()
+    for i in range(msg_idx):
+        if messages[i]["type"] == "assistant":
+            # Check if any user message exists between this assistant and target
+            for j in range(i + 1, msg_idx):
+                if messages[j]["type"] == "user":
+                    has_user_after.add(i)
+                    break
+
     for i, m in enumerate(messages[:msg_idx + 1]):
         if m["type"] == "user":
             msg_trace.append(UserMessage(content=m["content"]))
-        elif m["type"] == "assistant" and i == msg_idx:
+        elif m["type"] == "assistant":
             content = m.get("content", "")
+            if i == msg_idx:
+                # Target message: always include
+                pass
+            elif i in has_user_after:
+                # Prior assistant with a user follow-up: include for context
+                if is_trivially_empty(content):
+                    continue
+            else:
+                # Prior assistant with no user follow-up: skip to avoid contamination
+                continue
             if m.get("action"):
                 formatted = json.dumps({
                     "thought": content,
