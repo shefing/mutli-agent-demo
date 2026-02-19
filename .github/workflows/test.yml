@@ -33,15 +33,17 @@ jobs:
         uv pip install --system nemoguardrails presidio-analyzer presidio-anonymizer
 
         # Force compatible versions AFTER all installs (later installs can upgrade deps)
-        # - nemoguardrails pulls langchain 1.x which is incompatible with 0.2.x sub-packages
-        # - huggingface_hub 1.x removed HfFolder (needed by llamafirewall)
-        # - transformers 5.x needs huggingface_hub 1.x, but we need <1.0 for HfFolder
+        # nemoguardrails pulls langchain 1.x which is incompatible with 0.2.x sub-packages
         uv pip install --system --reinstall --no-deps \
           "openai==1.54.0" \
           "langchain==0.2.16" \
           "langchain-core==0.2.43" \
           "langchain-community==0.2.16" \
-          "langchain-openai==0.1.25" \
+          "langchain-openai==0.1.25"
+
+        # llamafirewall needs HfFolder (removed in huggingface_hub 1.x)
+        # Let uv resolve the full dependency tree (transformers, tokenizers, etc.)
+        uv pip install --system \
           "huggingface_hub==0.26.2" \
           "transformers==4.46.3"
         uv pip install --system tiktoken "httpx<0.28.0"
