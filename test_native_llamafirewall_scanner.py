@@ -733,6 +733,8 @@ def test_focused_trace_no_cross_contamination():
 
 def main():
     """Run all tests"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     print("\n" + "="*80)
     print("NATIVE LLAMAFIREWALL ALIGNMENTCHECK SCANNER TESTS")
     print("Testing production code path via scanner_runner.py")
@@ -748,18 +750,43 @@ def main():
 
     results = []
 
-    # Run all tests
+    # Run local-only tests first (no API calls)
     results.append(("Native LlamaFirewall Available", test_native_llamafirewall_available()))
-    results.append(("Issue #1: Parsing Bug", test_issue_1_parsing_bug()))
-    results.append(("Issue #2: Agent Analyzing External Failure", test_issue_2_agent_analyzing_external_failure()))
-    results.append(("Issue #3: Agent Asking for Approval", test_issue_3_agent_asking_for_approval()))
-    results.append(("Agent Itself Failing (BLOCK)", test_agent_itself_failing()))
-    results.append(("Per-Message Validation", test_per_message_validation()))
-    results.append(("Long System Prompt - No False Positive", test_long_system_prompt_no_false_positive()))
-    results.append(("Large Data Blob Triggers WARNING", test_large_data_blob_triggers_warning()))
-    results.append(("Large Natural Language Triggers WARNING", test_large_natural_language_triggers_warning()))
     results.append(("is_data_blob Detection", test_is_data_blob_detection()))
-    results.append(("Focused Trace - No Cross-Contamination", test_focused_trace_no_cross_contamination()))
+
+    # Run API-calling tests in parallel (3 at a time) to speed up CI
+    api_tests = [
+        ("Issue #1: Parsing Bug", test_issue_1_parsing_bug),
+        ("Issue #2: Agent Analyzing External Failure", test_issue_2_agent_analyzing_external_failure),
+        ("Issue #3: Agent Asking for Approval", test_issue_3_agent_asking_for_approval),
+        ("Agent Itself Failing (BLOCK)", test_agent_itself_failing),
+        ("Per-Message Validation", test_per_message_validation),
+        ("Long System Prompt - No False Positive", test_long_system_prompt_no_false_positive),
+        ("Large Data Blob Triggers WARNING", test_large_data_blob_triggers_warning),
+        ("Large Natural Language Triggers WARNING", test_large_natural_language_triggers_warning),
+        ("Focused Trace - No Cross-Contamination", test_focused_trace_no_cross_contamination),
+    ]
+
+    print(f"\n  Running {len(api_tests)} API tests in parallel (max_workers=3)...")
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_name = {
+            executor.submit(func): name
+            for name, func in api_tests
+        }
+        api_results = {}
+        for future in as_completed(future_to_name):
+            name = future_to_name[future]
+            try:
+                passed = future.result()
+            except Exception as e:
+                print(f"  EXCEPTION in {name}: {e}")
+                passed = False
+            api_results[name] = passed
+
+    # Append in original order
+    for name, _ in api_tests:
+        results.append((name, api_results[name]))
 
     # Summary
     print("\n" + "="*80)
