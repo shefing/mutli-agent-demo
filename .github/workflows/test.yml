@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - newUI
   pull_request:
     branches:
       - main
+      - newUI
 
 jobs:
   test:
