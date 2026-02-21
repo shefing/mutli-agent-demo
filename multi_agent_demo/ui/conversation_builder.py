@@ -427,7 +427,6 @@ def _render_control_buttons():
             st.session_state.current_conversation = {"purpose": "", "messages": []}
             st.session_state.test_results = []
             st.session_state.loaded_scenario_filename = None
-            st.session_state._force_expand_sidebar = True
             st.rerun()
 
     with col_btn2:

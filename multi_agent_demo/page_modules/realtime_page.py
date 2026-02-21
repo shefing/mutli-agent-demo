@@ -86,42 +86,6 @@ def render():
     # Render sidebar
     render_sidebar()
 
-    # Sidebar visibility via CSS
-    has_messages = len(st.session_state.current_conversation["messages"]) > 0
-    has_results = bool(st.session_state.test_results)
-    force_expand = st.session_state.pop("_force_expand_sidebar", False)
-
-    if not has_messages or force_expand:
-        # No scenario loaded — force sidebar open for loading
-        st.markdown("""
-            <style>
-            [data-testid="stSidebar"] {
-                display: block !important;
-                width: 336px !important;
-                min-width: 336px !important;
-                transform: none !important;
-                margin-left: 0 !important;
-            }
-            [data-testid="stSidebarCollapsedControl"] {
-                display: none !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-    elif has_results:
-        # Scenario loaded with results — collapse sidebar, keep expand arrow visible
-        st.markdown("""
-            <style>
-            [data-testid="stSidebar"] {
-                min-width: 0 !important;
-                width: 0 !important;
-                overflow: hidden !important;
-            }
-            [data-testid="stSidebarCollapsedControl"] {
-                display: block !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-
     # Handle auto-run after scenario load
     run_clicked = False
     if st.session_state.get("pending_auto_run"):
