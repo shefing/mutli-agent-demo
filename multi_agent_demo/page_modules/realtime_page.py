@@ -4,25 +4,49 @@ Original functionality for testing agent conversations with security scanners
 """
 
 import streamlit as st
-from multi_agent_demo.ui import render_sidebar, render_conversation_builder, render_test_results_new
-from multi_agent_demo.ui.common import render_page_header
+from multi_agent_demo.ui import render_sidebar, render_test_results_new
+from multi_agent_demo.ui.conversation_builder import render_conversation_builder
 
 
 def render():
     """Render the real-time testing page"""
-    # Page header
-    render_page_header(
-        "🛡️ Real-Time",
-        "Test AI agent conversations with security scanners in real-time"
-    )
 
-    # Render sidebar with scanner configuration and scenario selection
-    render_sidebar()
-
-    # Prevent wide content (tables, JSON, code blocks) in the conversation panel
-    # from overflowing into the results panel — clip with horizontal scrollbar
+    # Global CSS
     st.markdown("""
         <style>
+        /* Dense top: enough clearance for Streamlit toolbar, but compact */
+        [data-testid="stMainBlockContainer"] {
+            padding-top: 2.5rem !important;
+            font-size: 1rem;
+        }
+
+        /* Compact page header */
+        .page-header {
+            margin-bottom: 0.3rem;
+        }
+        .page-header h1 {
+            font-size: 1.4rem;
+            margin: 0 0 0.1rem 0;
+            line-height: 1.2;
+        }
+        .page-header p {
+            font-size: 0.95rem;
+            color: #999;
+            margin: 0;
+        }
+
+        /* Heading sizes */
+        .stMarkdown h2 {
+            font-size: 1.3rem !important;
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        .stMarkdown h3 {
+            font-size: 1.2rem !important;
+            margin-top: 0.4rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+
         /* Left column: clip overflow so wide tables/code get a scrollbar */
         [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
             overflow-x: auto;
@@ -32,16 +56,116 @@ def render():
             position: relative;
             z-index: 10;
         }
+
+        /* Override primary button color to blue for Run CTA */
+        [data-testid="stColumn"]:last-child button[kind="primary"] {
+            background-color: #2563eb;
+            border-color: #2563eb;
+        }
+        [data-testid="stColumn"]:last-child button[kind="primary"]:hover {
+            background-color: #1d4ed8;
+            border-color: #1d4ed8;
+        }
+
+        /* Larger Agent Purpose label */
+        [data-testid="stTextArea"] label p {
+            font-size: 1.05rem !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-    # Main content area with two columns
+    # Compact page header (dense)
+    st.markdown(
+        '<div class="page-header">'
+        '<h1>Omniguard: AI Agent Behavioral Governance</h1>'
+        '<p>Monitor Agent conversations with dedicated scanners</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # Render sidebar
+    render_sidebar()
+
+    # Sidebar visibility via CSS
+    has_messages = len(st.session_state.current_conversation["messages"]) > 0
+    has_results = bool(st.session_state.test_results)
+    force_expand = st.session_state.pop("_force_expand_sidebar", False)
+
+    if not has_messages or force_expand:
+        # No scenario loaded — force sidebar open for loading
+        st.markdown("""
+            <style>
+            [data-testid="stSidebar"] {
+                display: block !important;
+                width: 336px !important;
+                min-width: 336px !important;
+                transform: none !important;
+                margin-left: 0 !important;
+            }
+            [data-testid="stSidebarCollapsedControl"] {
+                display: none !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+    elif has_results:
+        # Scenario loaded with results — collapse sidebar, keep expand arrow visible
+        st.markdown("""
+            <style>
+            [data-testid="stSidebar"] {
+                min-width: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            [data-testid="stSidebarCollapsedControl"] {
+                display: block !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+    # Handle auto-run after scenario load
+    run_clicked = False
+    if st.session_state.get("pending_auto_run"):
+        st.session_state.pending_auto_run = False
+        run_clicked = True
+
+    # Two-column layout: purpose + conversation (left), run + results (right)
     col1, col2 = st.columns([3, 2])
 
     with col1:
-        # Render conversation builder (left panel)
+        # Scenario filename + Agent Purpose in left column only
+        with st.container(border=True):
+            loaded_file = st.session_state.get("loaded_scenario_filename")
+            if loaded_file:
+                st.markdown(
+                    f'<div style="color:#aaa; font-size:1rem; margin-bottom:4px;">'
+                    f'Scenario: <code style="user-select:all; cursor:text; font-size:1rem;">{loaded_file}</code></div>',
+                    unsafe_allow_html=True
+                )
+
+            purpose_val = st.session_state.current_conversation["purpose"]
+            line_count = purpose_val.count('\n') + 1
+            char_lines = max(1, len(purpose_val) // 70)
+            effective_lines = max(line_count, char_lines)
+            height = max(38, min(200, 18 + 20 * effective_lines))
+            purpose = st.text_area(
+                "Agent Purpose",
+                value=purpose_val,
+                placeholder="e.g., Check account balance and show transactions",
+                height=height,
+                key="sticky_purpose_input"
+            )
+            st.session_state.current_conversation["purpose"] = purpose
+
         render_conversation_builder()
 
     with col2:
-        # Render test results (right panel)
+        # Run button at top of results column
+        run_clicked = st.button("Run", type="primary", use_container_width=True, key="sticky_run_tests") or run_clicked
+
+        # Run tests if triggered
+        if run_clicked:
+            from multi_agent_demo.firewall import run_scanner_tests
+            with st.status("Running scanners...", expanded=False):
+                run_scanner_tests()
+
         render_test_results_new()

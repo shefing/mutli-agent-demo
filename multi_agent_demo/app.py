@@ -145,6 +145,14 @@ def initialize_session_state():
     if "editing_message_index" not in st.session_state:
         st.session_state.editing_message_index = None
 
+    # Auto-run flag (set by sidebar when loading a scenario with auto-run enabled)
+    if "pending_auto_run" not in st.session_state:
+        st.session_state.pending_auto_run = False
+    if "auto_run_after_load" not in st.session_state:
+        st.session_state.auto_run_after_load = True
+    if "loaded_scenario_filename" not in st.session_state:
+        st.session_state.loaded_scenario_filename = None
+
     # Deviations page state
     if "otel_data" not in st.session_state:
         st.session_state.otel_data = None
@@ -158,26 +166,21 @@ def initialize_session_state():
 
 def render_page_navigation():
     """Render page navigation in sidebar"""
-    st.sidebar.title("🛡️ Omniguard")
-
-    # Page selection
+    # Page selection — compact, no repeated title
     pages = ["Real-Time", "Deviation"]
 
-    # Use radio buttons for page selection
     selected_page = st.sidebar.radio(
         "Navigation",
         pages,
         index=pages.index(st.session_state.current_page),
         key="page_selector",
-        label_visibility="collapsed"  # Hide the "Navigation" label
+        label_visibility="collapsed",
+        horizontal=True
     )
 
-    # Update current page if changed
     if selected_page != st.session_state.current_page:
         st.session_state.current_page = selected_page
         st.rerun()
-
-    st.sidebar.divider()
 
 
 def main():

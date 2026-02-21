@@ -8,65 +8,191 @@ from datetime import datetime
 from multi_agent_demo.core.scanner_runner import validate_session_messages
 
 
+def _get_message_scan_decision(msg_index: int, msg_type: str) -> str | None:
+    """Get the worst scan decision for a specific message across ALL scanners.
+
+    Aggregates results from AlignmentCheck, PromptGuard, DataDisclosureGuard
+    (which use message_results with message_index) and FactsChecker (which uses
+    per_message_findings with 1-based assistant message_number).
+
+    Returns: 'SAFE', 'WARNING', 'BLOCK', or None if not scanned.
+    """
+    if not st.session_state.test_results:
+        return None
+
+    latest = st.session_state.test_results[-1]
+    has_any_results = False
+    worst = "SAFE"
+
+    def _escalate(current, new_decision):
+        """Return the more severe decision"""
+        severity = {"SAFE": 0, "WARNING": 1, "BLOCK": 2}
+        if severity.get(new_decision, 0) > severity.get(current, 0):
+            return new_decision
+        return current
+
+    # Check AlignmentCheck (assistant messages, uses message_index 0-based)
+    if latest.get("alignment_check"):
+        has_any_results = True
+        for mr in latest["alignment_check"].get("message_results", []):
+            if mr.get("message_index") == msg_index:
+                worst = _escalate(worst, mr.get("decision", "SAFE"))
+
+    # Check PromptGuard (user messages, uses message_index 0-based)
+    if latest.get("prompt_guard"):
+        has_any_results = True
+        for mr in latest["prompt_guard"].get("message_results", []):
+            if mr.get("message_index") == msg_index:
+                worst = _escalate(worst, mr.get("decision", "SAFE"))
+
+    # Check NeMo scanners
+    for scanner_name, scanner_result in latest.get("nemo_results", {}).items():
+        has_any_results = True
+
+        # DataDisclosureGuard uses message_results with message_index (0-based)
+        for mr in scanner_result.get("message_results", []):
+            if mr.get("message_index") == msg_index:
+                worst = _escalate(worst, mr.get("decision", "SAFE"))
+
+        # FactsChecker uses per_message_findings with message_number (1-based assistant index)
+        if scanner_name == "FactsChecker" and msg_type == "assistant":
+            messages = st.session_state.current_conversation.get("messages", [])
+            # Calculate 1-based assistant number for this message_index
+            assistant_num = 0
+            for i in range(msg_index + 1):
+                if i < len(messages) and messages[i].get("type") == "assistant":
+                    assistant_num += 1
+
+            # Check per_message_findings
+            for finding in scanner_result.get("per_message_findings", []):
+                if finding.get("message_number") == assistant_num:
+                    issue_type = finding.get("issue_type", "")
+                    if "Contradiction" in issue_type:
+                        worst = _escalate(worst, "BLOCK")
+                    else:
+                        worst = _escalate(worst, "WARNING")
+
+            # Also check overall decision if there are issues detected
+            if scanner_result.get("overall_decision") == "BLOCK" and msg_type == "assistant":
+                # Self-contradiction applies to all assistant messages
+                if "Self-Contradiction" in scanner_result.get("issues_detected", []):
+                    worst = _escalate(worst, "WARNING")  # Mark all assistant msgs at least WARNING
+
+    if has_any_results:
+        return worst
+    return None
+
+
+def _decision_border_color(decision: str | None) -> str:
+    """Return CSS border color for a scan decision"""
+    if decision == "BLOCK":
+        return "#e74c3c"
+    elif decision == "WARNING":
+        return "#f39c12"
+    elif decision == "SAFE":
+        return "#27ae60"
+    return "#555"
+
+
+def _role_badge_html(role: str, number: int, decision: str | None, index: int = None) -> str:
+    """Generate an HTML badge for a message role with decision color"""
+    color = _decision_border_color(decision)
+    prefix = "U" if role == "user" else "A"
+    badge = f'<span style="background:{color}; color:white; padding:3px 10px; border-radius:4px; font-size:0.9rem; font-weight:bold;">{prefix}#{number}</span>'
+    if index is not None:
+        badge += (
+            f'<span class="msg-actions-inline">'
+            f'<a href="?edit_msg={index}" target="_self" title="Edit">&#9998;</a>'
+            f'<a href="?delete_msg={index}" target="_self" title="Delete">&#128465;</a>'
+            f'</span>'
+        )
+    return badge
+
+
 def render_conversation_builder():
     """Render the conversation builder UI"""
 
-    # Custom CSS to reduce markdown heading sizes in conversation display
+    # CSS for hover-only edit/delete icons inside message headers
     st.markdown("""
         <style>
-        /* Reduce h2 (##) heading size in conversation */
-        .stMarkdown h2 {
-            font-size: 1.2rem !important;
-            margin-top: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
+        .msg-actions-inline {
+            opacity: 0;
+            transition: opacity 0.15s;
+            margin-left: 8px;
+            display: inline;
         }
-        /* Reduce h3 (###) heading size in conversation */
-        .stMarkdown h3 {
-            font-size: 1.1rem !important;
-            margin-top: 0.4rem !important;
-            margin-bottom: 0.4rem !important;
+        .msg-wrapper:hover .msg-actions-inline {
+            opacity: 1;
+        }
+        .msg-actions-inline a {
+            color: #888;
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-left: 6px;
+            cursor: pointer;
+        }
+        .msg-actions-inline a:hover {
+            color: #ccc;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # Agent Configuration
-    st.subheader("🎯 Agent Purpose")
-    purpose = st.text_area(
-        "Agent Intended Purpose",
-        value=st.session_state.current_conversation["purpose"],
-        help="Define what the agent is supposed to do",
-        placeholder="e.g., Check account balance and show transactions",
-        height=60
-    )
-    st.session_state.current_conversation["purpose"] = purpose
+    # Handle edit/delete via query params (set by inline HTML links)
+    params = st.query_params
+    if "edit_msg" in params:
+        try:
+            st.session_state.editing_message_index = int(params["edit_msg"])
+        except (ValueError, TypeError):
+            pass
+        st.query_params.clear()
+        st.rerun()
+    if "delete_msg" in params:
+        try:
+            idx = int(params["delete_msg"])
+            msgs = st.session_state.current_conversation["messages"]
+            if 0 <= idx < len(msgs):
+                del msgs[idx]
+        except (ValueError, TypeError):
+            pass
+        st.query_params.clear()
+        st.rerun()
 
-    st.divider()
-    st.subheader("💬 Conversation Builder")
-
-    # Display current conversation with role-specific numbering
+    messages = st.session_state.current_conversation["messages"]
+    msg_count = len(messages)
+    conv_cols = st.columns([3, 1])
+    with conv_cols[0]:
+        st.subheader("Conversation")
+    with conv_cols[1]:
+        st.markdown(
+            f"<div style='padding-top:10px; color:#888; font-size:0.95rem; text-align:right;'>"
+            f"{msg_count} message{'s' if msg_count != 1 else ''}</div>",
+            unsafe_allow_html=True
+        )
     user_count = 0
     assistant_count = 0
 
-    for i, msg in enumerate(st.session_state.current_conversation["messages"]):
-        # Count messages by role for numbering
+    if not messages:
+        st.caption("No messages yet. Add messages below or load a scenario from the sidebar.")
+
+    for i, msg in enumerate(messages):
         if msg["type"] == "user":
             user_count += 1
             role_number = user_count
-        else:  # assistant
+        else:
             assistant_count += 1
             role_number = assistant_count
 
         if st.session_state.editing_message_index == i:
-            # Editing mode for this message
             _render_message_editor(i, msg)
         else:
-            # Normal display mode with edit/delete buttons
-            _render_message_display(i, msg, role_number)
+            decision = _get_message_scan_decision(i, msg["type"])
+            _render_message_display(i, msg, role_number, decision)
 
-    # Add new message
-    _render_message_adder()
+    # Add new message (collapsible)
+    with st.expander("Add message", expanded=len(messages) == 0):
+        _render_message_adder()
 
-    # Control buttons
+    # Control buttons (export + clear only — Run Tests is in sticky bar)
     _render_control_buttons()
 
 
@@ -82,17 +208,16 @@ def _render_message_editor(index: int, msg: dict):
             )
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✓ Update", key=f"update_{index}"):
+                if st.button("Update", key=f"update_{index}"):
                     st.session_state.current_conversation["messages"][index]["content"] = edited_content
                     st.session_state.editing_message_index = None
                     st.rerun()
             with col2:
-                if st.button("❌ Cancel", key=f"cancel_{index}"):
+                if st.button("Cancel", key=f"cancel_{index}"):
                     st.session_state.editing_message_index = None
                     st.rerun()
         else:
             if msg.get("action"):
-                # Editing assistant action
                 edited_action = st.text_input(
                     "Edit action name:",
                     value=msg.get("action", ""),
@@ -112,7 +237,7 @@ def _render_message_editor(index: int, msg: dict):
                 )
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✓ Update", key=f"update_{index}"):
+                    if st.button("Update", key=f"update_{index}"):
                         try:
                             action_input = json.loads(edited_params) if edited_params else {}
                             st.session_state.current_conversation["messages"][index].update({
@@ -125,90 +250,98 @@ def _render_message_editor(index: int, msg: dict):
                         except json.JSONDecodeError:
                             st.error("Invalid JSON in parameters")
                 with col2:
-                    if st.button("❌ Cancel", key=f"cancel_{index}"):
+                    if st.button("Cancel", key=f"cancel_{index}"):
                         st.session_state.editing_message_index = None
                         st.rerun()
             else:
-                # Editing regular assistant response
                 edited_content = st.text_area(
-                    "Edit assistant response:",
+                    "Edit agent response:",
                     value=msg["content"],
                     height=80,
                     key=f"edit_assistant_{index}"
                 )
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✓ Update", key=f"update_{index}"):
+                    if st.button("Update", key=f"update_{index}"):
                         st.session_state.current_conversation["messages"][index]["content"] = edited_content
                         st.session_state.editing_message_index = None
                         st.rerun()
                 with col2:
-                    if st.button("❌ Cancel", key=f"cancel_{index}"):
+                    if st.button("Cancel", key=f"cancel_{index}"):
                         st.session_state.editing_message_index = None
                         st.rerun()
 
 
-def _render_message_display(index: int, msg: dict, role_number: int):
-    """Render message display with edit/delete buttons and role-specific numbering"""
+def _render_message_display(index: int, msg: dict, role_number: int, decision: str | None):
+    """Render message display with colored border and visual differentiation between user/agent"""
+    border_color = _decision_border_color(decision)
+    badge = _role_badge_html(msg["type"], role_number, decision, index=index)
+
+    # Visual differentiation: user messages have lighter bg, agent messages have slightly different bg
     if msg["type"] == "user":
-        with st.chat_message("user"):
-            col_msg, col_btns = st.columns([4, 1])
-            with col_msg:
-                # Show message number (User #1, User #2, etc.)
-                st.caption(f"User #{role_number}")
-                # Render markdown for better formatting (headings, bold, tables, etc.)
-                st.markdown(msg["content"])
-            with col_btns:
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    if st.button("✏️", key=f"edit_btn_{index}", help="Edit message"):
-                        st.session_state.editing_message_index = index
-                        st.rerun()
-                with btn_col2:
-                    if st.button("🗑️", key=f"delete_btn_{index}", help="Delete message"):
-                        del st.session_state.current_conversation["messages"][index]
-                        st.rerun()
+        bg_color = "rgba(100, 149, 237, 0.06)"  # subtle blue tint for user
+        role_label = "User"
     else:
-        with st.chat_message("assistant"):
-            col_msg, col_btns = st.columns([4, 1])
-            with col_msg:
-                # Show message number (Assistant #1, Assistant #2, etc.)
-                st.caption(f"Assistant #{role_number}")
-                if msg.get("action"):
-                    st.write(f"**Action:** `{msg['action']}`")
-                    st.write("**Thought:**")
-                    st.markdown(msg["content"])
-                    if msg.get("action_input"):
-                        st.json(msg["action_input"])
-                else:
-                    # Render markdown for better formatting (headings, bold, tables, etc.)
-                    st.markdown(msg["content"])
-            with col_btns:
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    if st.button("✏️", key=f"edit_btn_{index}", help="Edit message"):
-                        st.session_state.editing_message_index = index
-                        st.rerun()
-                with btn_col2:
-                    if st.button("🗑️", key=f"delete_btn_{index}", help="Delete message"):
-                        del st.session_state.current_conversation["messages"][index]
-                        st.rerun()
+        bg_color = "rgba(255, 255, 255, 0.03)"  # neutral for agent
+        role_label = "Agent"
+
+    if msg["type"] == "user":
+        content_text = msg["content"].replace("\n", "<br>")
+        msg_html = f"""
+        <div class="msg-wrapper" id="msg-{index}">
+            <div style="border-left: 4px solid {border_color}; padding: 10px 14px; margin: 4px 0; border-radius: 0 6px 6px 0; background: {bg_color};">
+                <div style="margin-bottom:4px;">
+                    {badge} <span style="color:#6495ED; font-size:0.95rem; margin-left:4px; font-weight:500;">{role_label}</span>
+                </div>
+                <div style="font-size:1rem; line-height:1.5;">{content_text}</div>
+            </div>
+        </div>
+        """
+        st.markdown(msg_html, unsafe_allow_html=True)
+    else:
+        if msg.get("action"):
+            thought_text = msg["content"].replace("\n", "<br>")
+            params_text = json.dumps(msg.get("action_input", {}), indent=2)
+            msg_html = f"""
+            <div class="msg-wrapper" id="msg-{index}">
+                <div style="border-left: 4px solid {border_color}; padding: 10px 14px; margin: 4px 0; border-radius: 0 6px 6px 0; background: {bg_color};">
+                    <div style="margin-bottom:4px;">
+                        {badge} <span style="color:#aaa; font-size:0.95rem; margin-left:4px;">{role_label} &middot; <code>{msg['action']}</code></span>
+                    </div>
+                    <div style="font-size:0.95rem; color:#aaa; margin-bottom:2px;">{thought_text}</div>
+                    <pre style="font-size:0.9rem; background:rgba(0,0,0,0.2); padding:6px; border-radius:4px; margin:4px 0 0 0; overflow-x:auto;">{params_text}</pre>
+                </div>
+            </div>
+            """
+            st.markdown(msg_html, unsafe_allow_html=True)
+        else:
+            content_text = msg["content"].replace("\n", "<br>")
+            msg_html = f"""
+            <div class="msg-wrapper" id="msg-{index}">
+                <div style="border-left: 4px solid {border_color}; padding: 10px 14px; margin: 4px 0; border-radius: 0 6px 6px 0; background: {bg_color};">
+                    <div style="margin-bottom:4px;">
+                        {badge} <span style="color:#aaa; font-size:0.95rem; margin-left:4px; font-weight:500;">{role_label}</span>
+                    </div>
+                    <div style="font-size:1rem; line-height:1.5;">{content_text}</div>
+                </div>
+            </div>
+            """
+            st.markdown(msg_html, unsafe_allow_html=True)
 
 
 def _render_message_adder():
     """Render UI for adding new messages"""
-    message_type = st.radio("Add message", ["User", "Assistant", "Assistant Action"], horizontal=True)
+    message_type = st.radio("Type", ["User", "Agent", "Agent Action"], horizontal=True, label_visibility="collapsed")
 
     if message_type == "User":
         user_content = st.text_area(
             "User message",
             value=st.session_state.input_user_content,
             height=80,
-            placeholder="Enter user message... (supports multi-line text)",
-            help="Type the user's message. The text area will expand as you type.",
+            placeholder="Enter user message...",
+            label_visibility="collapsed",
             key="user_message_input"
         )
-        # Update session state when input changes
         st.session_state.input_user_content = user_content
 
         if st.button("Add User Message") and user_content:
@@ -216,32 +349,29 @@ def _render_message_adder():
                 "type": "user",
                 "content": user_content
             })
-            # Clear the input field
             st.session_state.input_user_content = ""
             st.rerun()
 
-    elif message_type == "Assistant":
+    elif message_type == "Agent":
         assistant_content = st.text_area(
-            "Assistant response",
+            "Agent response",
             value=st.session_state.input_assistant_content,
             height=80,
-            placeholder="Enter assistant response... (supports multi-line text)",
-            help="Type the assistant's response. The text area will expand as you type.",
+            placeholder="Enter agent response...",
+            label_visibility="collapsed",
             key="assistant_message_input"
         )
-        # Update session state when input changes
         st.session_state.input_assistant_content = assistant_content
 
-        if st.button("Add Assistant Response") and assistant_content:
+        if st.button("Add Agent Response") and assistant_content:
             st.session_state.current_conversation["messages"].append({
                 "type": "assistant",
                 "content": assistant_content
             })
-            # Clear the input field
             st.session_state.input_assistant_content = ""
             st.rerun()
 
-    else:  # Assistant Action
+    else:  # Agent Action
         col_a, col_b = st.columns(2)
         with col_a:
             action_name = st.text_input(
@@ -250,18 +380,15 @@ def _render_message_adder():
                 placeholder="e.g., transfer_funds",
                 key="action_name_input"
             )
-            # Update session state
             st.session_state.input_action_name = action_name
 
             thought = st.text_area(
                 "Thought",
                 value=st.session_state.input_thought,
                 height=60,
-                placeholder="What the assistant is thinking...",
-                help="Describe the assistant's reasoning for this action",
+                placeholder="What the agent is thinking...",
                 key="thought_input"
             )
-            # Update session state
             st.session_state.input_thought = thought
 
         with col_b:
@@ -270,13 +397,11 @@ def _render_message_adder():
                 value=st.session_state.input_params,
                 height=60,
                 placeholder='{"to": "account", "amount": 100}',
-                help="JSON parameters for the action",
                 key="params_input"
             )
-            # Update session state
             st.session_state.input_params = params
 
-        if st.button("Add Assistant Action") and action_name and thought:
+        if st.button("Add Agent Action") and action_name and thought:
             try:
                 action_input = json.loads(params) if params else {}
                 st.session_state.current_conversation["messages"].append({
@@ -285,7 +410,6 @@ def _render_message_adder():
                     "action": action_name,
                     "action_input": action_input
                 })
-                # Clear all action input fields
                 st.session_state.input_action_name = ""
                 st.session_state.input_thought = ""
                 st.session_state.input_params = ""
@@ -295,25 +419,19 @@ def _render_message_adder():
 
 
 def _render_control_buttons():
-    """Render control buttons for the conversation"""
-    col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+    """Render control buttons — export and clear only (Run Tests is in sticky bar)"""
+    col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
-        if st.button("🧪 Run Tests", type="primary", use_container_width=True):
-            # Import here to avoid circular imports
-            from multi_agent_demo.firewall import run_scanner_tests
-            run_scanner_tests()
-
-    with col_btn2:
-        if st.button("🗑️ Clear Conversation", use_container_width=True):
+        if st.button("Clear Conversation", use_container_width=True):
             st.session_state.current_conversation = {"purpose": "", "messages": []}
-            # Clear test results when clearing conversation
             st.session_state.test_results = []
+            st.session_state.loaded_scenario_filename = None
+            st.session_state._force_expand_sidebar = True
             st.rerun()
 
-    with col_btn3:
-        # Export current scenario
-        with st.popover("📤 Export Scenario", use_container_width=True):
+    with col_btn2:
+        with st.popover("Export Scenario", use_container_width=True):
             if st.session_state.current_conversation["messages"]:
                 export_data = {
                     "scenario_name": "Exported Scenario",
@@ -326,7 +444,7 @@ def _render_control_buttons():
                 export_json = json.dumps(export_data, indent=2, ensure_ascii=False)
 
                 st.download_button(
-                    label="📥 Download JSON",
+                    label="Download JSON",
                     data=export_json,
                     file_name=f"ai_guards_scenario_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json",
@@ -334,63 +452,9 @@ def _render_control_buttons():
                 )
 
                 st.text_area(
-                    "Copy this JSON (shareable via email/Slack):",
+                    "Copy JSON:",
                     value=export_json,
-                    height=150,
-                    help="Copy this text and share it with others"
+                    height=150
                 )
             else:
-                st.info("💡 Create a conversation first to export it")
-
-    with col_btn4:
-        # Import scenario
-        with st.popover("📥 Import Scenario", use_container_width=True):
-            uploaded_file = st.file_uploader(
-                "Choose scenario file (.json or .txt)",
-                type=['json', 'txt'],
-                help="Upload a .json or .txt file exported from AI Guards Testing",
-                key="scenario_file_uploader"
-            )
-
-            if uploaded_file is not None:
-                try:
-                    # Check file extension
-                    file_name = uploaded_file.name.lower()
-                    if file_name.endswith('.txt'):
-                        # Read as text and parse as JSON
-                        content = uploaded_file.read().decode('utf-8')
-                        imported_data = json.loads(content)
-                    else:
-                        # Read as JSON directly
-                        imported_data = json.load(uploaded_file)
-                    st.success("✓ File loaded successfully")
-
-                    # Validate the imported data
-                    required_fields = ['agent_purpose', 'messages']
-                    ok, err = validate_session_messages(imported_data.get("messages", []))
-                    if not ok:
-                        st.error(f"❌ Session too large: {err}")
-                    elif all(field in imported_data for field in required_fields):
-                        st.write("**Preview:**")
-                        purpose_preview = imported_data['agent_purpose'][:100]
-                        if len(imported_data['agent_purpose']) > 100:
-                            purpose_preview += "..."
-                        st.write(f"**Purpose:** {purpose_preview}")
-                        st.write(f"**Messages:** {len(imported_data['messages'])}")
-
-                        if st.button("✓ Import Scenario", type="primary", use_container_width=True):
-                            # Load the scenario into current conversation
-                            st.session_state.current_conversation = {
-                                "purpose": imported_data['agent_purpose'],
-                                "messages": imported_data['messages']
-                            }
-                            # Clear any existing test results
-                            st.session_state.test_results = []
-                            st.success("✓ Scenario imported successfully!")
-                            st.rerun()
-                    else:
-                        st.error("❌ Invalid scenario format. Missing required fields: agent_purpose, messages")
-                except json.JSONDecodeError as e:
-                    st.error(f"❌ Invalid JSON file: {str(e)}")
-            else:
-                st.info("📁 Upload a JSON file to import a scenario")
+                st.info("Create a conversation first to export it")
