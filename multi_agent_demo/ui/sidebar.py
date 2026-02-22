@@ -15,6 +15,7 @@ def _load_scenario_data(purpose, messages, filename=None):
         "purpose": purpose,
         "messages": messages
     }
+    st.session_state.agent_purpose = purpose
     st.session_state.test_results = []
     st.session_state.loaded_scenario_filename = filename
     if st.session_state.get("auto_run_after_load", True):

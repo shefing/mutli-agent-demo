@@ -353,6 +353,16 @@ class DataDisclosureGuardScanner:
 
         # Bank number specific filtering
         if entity_type == "US_BANK_NUMBER":
+            # Floating-point fractional digits (e.g., cvssScore: 7.099999904632568)
+            # Presidio sees the digits after the decimal as a standalone number
+            import re
+            if entity["start"] > 0 and text[entity["start"] - 1] == '.':
+                # Check if a digit precedes the dot (i.e., this is part of a float)
+                dot_pos = entity["start"] - 1
+                if dot_pos > 0 and text[dot_pos - 1].isdigit():
+                    print(f"   ℹ️  Filtering out US_BANK_NUMBER '{entity_text}' - fractional part of decimal number")
+                    return True
+
             # Timestamp-like numbers (unix timestamps often detected as bank numbers)
             if len(entity_text) >= 10 and entity_text.startswith('17'):
                 # Unix timestamps in milliseconds or seconds starting with 17 (years 2023+)
