@@ -119,66 +119,386 @@ def _run_alignment_check(purpose, messages, ...):
 
 ---
 
-## Optimization 3: Trace Summarization for Data-Heavy Sessions
+## Optimization 3: Smart Trace Summarization for Data-Heavy Sessions
 
 ### Problem
-User messages containing large JSON objects (API responses, config dumps) consume many tokens but carry no behavioral signal for AlignmentCheck. A 10K JSON blob in the trace adds ~2,500 tokens per call, and it's included in every subsequent cumulative trace.
 
-### Design
-Before building the AlignmentCheck trace, replace data blobs with compact summaries:
+User messages often contain large structured data (vulnerability scan results, API responses,
+config dumps, log files) that carry no behavioral signal for AlignmentCheck but dominate the
+token budget and trigger hard limits that skip scanning entirely.
+
+**Real-world example:** A Checkmarx vulnerability scan result (`results.txt`):
+- 55K chars (~14K tokens) — a single user message
+- 20 vulnerability entries (19 SCA + 1 SAST) with CVE IDs, CVSS scores, descriptions, package data
+- Agent replies are short natural-language summaries
+
+**What happens today:**
+1. `validate_session_messages()` **rejects the entire session** (55K > `SESSION_MSG_SIZE_LIMIT` of 50K)
+2. Even if loaded, `check_trace_for_large_messages()` skips AlignmentCheck (55K > `MSG_SIZE_LIMIT` of 12K)
+3. `is_data_blob()` returns `True` (starts with `{`) — every assistant message gets WARNING + skipped
+4. **Result: AlignmentCheck cannot evaluate any agent response in the session**
+
+### Design: Pluggable Smart Summarizer
+
+Instead of a generic `[structured data, 55K chars]` placeholder, extract the **behavioral
+signal** — what the user provided and what they're asking about — so AlignmentCheck can still
+evaluate whether the agent's response is aligned with the purpose.
+
+#### Architecture
+
+```
+summarize_for_trace(content, msg_type)
+  │
+  ├── len(content) <= SUMMARIZE_THRESHOLD? → return as-is
+  │
+  ├── Try JSON parse
+  │     ├── Detect known schema → domain summarizer
+  │     │     ├── vulnerability scan (has "results" with "severity"/"cve")
+  │     │     ├── API response (has "status"/"data"/"error")
+  │     │     ├── OTEL trace (has "resourceSpans"/"traceId")
+  │     │     └── ... extensible
+  │     │
+  │     └── Unknown JSON → generic JSON summarizer
+  │           (top-level keys, array lengths, nested depth)
+  │
+  ├── Not JSON but structured (XML, CSV, logs) → generic structured summarizer
+  │
+  └── Long natural language → truncate with indicator
+```
+
+#### Core Module: `multi_agent_demo/core/trace_summarizer.py`
 
 ```python
-def summarize_for_trace(content: str, msg_type: str) -> str:
-    """Replace data blobs with compact summaries for AlignmentCheck traces."""
-    if len(content) <= 2000:
-        return content
-    if is_data_blob(content):
-        # Extract key signals: top-level keys, array lengths, error fields
-        preview = _extract_data_summary(content)
-        return f"[{msg_type} message: structured data, {len(content):,} chars. Keys: {preview}]"
-    # Long natural language: truncate with indicator
-    return content[:2000] + f"\n[... truncated, {len(content):,} chars total]"
+import json
+from typing import Optional
 
-def _extract_data_summary(content: str) -> str:
-    """Extract top-level JSON keys or first line for non-JSON data."""
+# Messages below this size are passed through unchanged
+SUMMARIZE_THRESHOLD = 3000  # chars (~750 tokens)
+
+# Maximum summary size — must leave room for the rest of the trace
+MAX_SUMMARY_SIZE = 1500     # chars (~375 tokens)
+
+
+def summarize_for_trace(content: str, msg_type: str = "user") -> str:
+    """Produce a compact behavioral summary of a message for AlignmentCheck traces.
+
+    Only context messages (not the target assistant message being evaluated) are
+    summarized. The summary preserves intent and key facts while stripping
+    voluminous raw data that confuses the alignment model.
+
+    Returns original content if below SUMMARIZE_THRESHOLD.
+    """
+    if len(content) <= SUMMARIZE_THRESHOLD:
+        return content
+
+    # Try JSON-based summarization
+    json_summary = _try_json_summary(content)
+    if json_summary:
+        return json_summary
+
+    # Try generic structured data detection
+    if _is_structured(content):
+        return _summarize_structured(content, msg_type)
+
+    # Long natural language — keep beginning and end (most relevant parts)
+    half = MAX_SUMMARY_SIZE // 2
+    return (
+        content[:half]
+        + f"\n\n[... {len(content):,} chars total, middle truncated for trace ...]\n\n"
+        + content[-half:]
+    )
+
+
+def _try_json_summary(content: str) -> Optional[str]:
+    """Attempt to parse as JSON and apply domain-aware or generic summarization."""
+    stripped = content.strip()
+    if not stripped.startswith(("{", "[")):
+        return None
     try:
-        data = json.loads(content)
-        if isinstance(data, dict):
-            return ", ".join(list(data.keys())[:10])
-        elif isinstance(data, list):
-            return f"array of {len(data)} items"
-    except json.JSONDecodeError:
-        pass
-    return content[:100]
+        data = json.loads(stripped)
+    except (json.JSONDecodeError, ValueError):
+        # Try stripping common non-JSON prefixes (zero-width spaces, BOM)
+        import re
+        cleaned = re.sub(r'^[\s\u200b\u200c\u200d\ufeff]+', '', content)
+        try:
+            data = json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
+    # --- Domain detection and dispatch ---
+
+    if isinstance(data, dict):
+        # Vulnerability scan results (Checkmarx, Snyk, etc.)
+        if "results" in data and isinstance(data["results"], list):
+            first = data["results"][0] if data["results"] else {}
+            if any(k in first for k in ("severity", "cve", "cveName", "vulnerabilityDetails")):
+                return _summarize_vulnerability_scan(data)
+
+        # API response pattern
+        if any(k in data for k in ("status_code", "statusCode", "error", "data")):
+            return _summarize_api_response(data)
+
+        # OTEL trace pattern
+        if any(k in data for k in ("resourceSpans", "traceId", "spans")):
+            return _summarize_otel_trace(data)
+
+    # Generic JSON fallback
+    return _summarize_generic_json(data, len(content))
+
+
+# --- Domain Summarizers ---
+
+def _summarize_vulnerability_scan(data: dict) -> str:
+    """Summarize security scan results preserving severity distribution and key findings."""
+    results = data.get("results", [])
+    scan_id = data.get("scan_id", "unknown")
+
+    # Aggregate by type and severity
+    by_type = {}
+    by_severity = {}
+    for r in results:
+        t = r.get("type", "unknown")
+        by_type[t] = by_type.get(t, 0) + 1
+        s = r.get("severity", "unknown")
+        by_severity[s] = by_severity.get(s, 0) + 1
+
+    # Extract high/critical findings (most relevant for agent behavior)
+    high_findings = []
+    for r in results:
+        if r.get("severity") in ("HIGH", "CRITICAL"):
+            cve = r.get("id", "unknown")
+            desc = r.get("description", "")[:200]
+            pkg = ""
+            if r.get("data", {}).get("packageIdentifier"):
+                pkg = f" ({r['data']['packageIdentifier']})"
+            rec = ""
+            if r.get("data", {}).get("recommendedVersion"):
+                rec = f" → fix: {r['data']['recommendedVersion']}"
+            high_findings.append(f"  - {cve}{pkg}: {desc}{rec}")
+
+    lines = [
+        f"[Vulnerability scan: {len(results)} findings from scan {scan_id[:12]}]",
+        f"Types: {', '.join(f'{v} {k.upper()}' for k, v in sorted(by_type.items()))}",
+        f"Severities: {', '.join(f'{v} {k}' for k, v in sorted(by_severity.items()))}",
+    ]
+    if high_findings:
+        lines.append(f"High/Critical findings ({len(high_findings)}):")
+        lines.extend(high_findings[:8])  # Cap at 8 to stay within budget
+        if len(high_findings) > 8:
+            lines.append(f"  ... and {len(high_findings) - 8} more")
+
+    return "\n".join(lines)
+
+
+def _summarize_api_response(data: dict) -> str:
+    """Summarize API response preserving status, error info, and data shape."""
+    status = data.get("status_code") or data.get("statusCode") or data.get("status", "?")
+    error = data.get("error") or data.get("message") or ""
+
+    # Describe data shape
+    data_field = data.get("data") or data.get("response") or data.get("body")
+    if isinstance(data_field, list):
+        shape = f"array of {len(data_field)} items"
+    elif isinstance(data_field, dict):
+        shape = f"object with keys: {', '.join(list(data_field.keys())[:10])}"
+    else:
+        shape = f"keys: {', '.join(list(data.keys())[:10])}"
+
+    summary = f"[API response: status={status}, {shape}]"
+    if error:
+        summary += f"\nError: {str(error)[:300]}"
+    return summary
+
+
+def _summarize_otel_trace(data: dict) -> str:
+    """Summarize OpenTelemetry trace data."""
+    spans = data.get("resourceSpans") or data.get("spans") or []
+    span_count = len(spans) if isinstance(spans, list) else "?"
+    trace_id = data.get("traceId", "unknown")
+    return f"[OTEL trace: {span_count} spans, traceId={str(trace_id)[:12]}]"
+
+
+def _summarize_generic_json(data, original_size: int) -> str:
+    """Fallback: describe JSON structure without including raw values."""
+    if isinstance(data, list):
+        item_types = set()
+        for item in data[:5]:
+            if isinstance(item, dict):
+                item_types.update(list(item.keys())[:5])
+            else:
+                item_types.add(type(item).__name__)
+        return (
+            f"[JSON array: {len(data)} items, {original_size:,} chars. "
+            f"Item fields: {', '.join(sorted(item_types)[:10])}]"
+        )
+    elif isinstance(data, dict):
+        top_keys = list(data.keys())[:15]
+        # Show nested structure for first level
+        structure = []
+        for k in top_keys[:10]:
+            v = data[k]
+            if isinstance(v, list):
+                structure.append(f"{k}: [{len(v)} items]")
+            elif isinstance(v, dict):
+                structure.append(f"{k}: {{{', '.join(list(v.keys())[:5])}}}")
+            elif isinstance(v, str) and len(v) > 100:
+                structure.append(f"{k}: \"{v[:80]}...\"")
+            else:
+                structure.append(f"{k}: {json.dumps(v)}"[:80])
+        return (
+            f"[JSON object: {len(data)} keys, {original_size:,} chars]\n"
+            + "\n".join(structure)
+        )
+    return f"[JSON data: {original_size:,} chars]"
+
+
+def _is_structured(content: str) -> bool:
+    """Detect non-JSON structured data (XML, CSV, logs)."""
+    stripped = content.strip()
+    if stripped.startswith("<?xml") or stripped.startswith("<"):
+        return True
+    # CSV heuristic: consistent comma/tab counts across first few lines
+    lines = stripped.split("\n", 10)
+    if len(lines) >= 3:
+        sep_counts = [line.count(",") for line in lines[:5]]
+        if sep_counts[0] > 2 and all(c == sep_counts[0] for c in sep_counts):
+            return True
+    return False
+
+
+def _summarize_structured(content: str, msg_type: str) -> str:
+    """Summarize non-JSON structured data."""
+    lines = content.strip().split("\n")
+    line_count = len(lines)
+    if content.strip().startswith("<"):
+        return (
+            f"[{msg_type} message: XML/HTML data, {len(content):,} chars, "
+            f"{line_count} lines]\n"
+            f"Root: {lines[0][:100]}"
+        )
+    return (
+        f"[{msg_type} message: structured data, {len(content):,} chars, "
+        f"{line_count} lines]\n"
+        f"Header: {lines[0][:100]}"
+    )
 ```
+
+#### Real-World Example
+
+Input: Checkmarx vulnerability scan (55K chars, ~14K tokens, 20 CVEs):
+
+```
+[Vulnerability scan: 20 findings from scan 6f694598-faf]
+Types: 1 SAST, 19 SCA
+Severities: 11 HIGH, 1 LOW, 8 MEDIUM
+High/Critical findings (11):
+  - CVE-2021-43818 (Python-lxml-4.6.1): lxml HTML Cleaner lets crafted script content pass through → fix: 6.0.2
+  - CVE-2017-18342 (Python-PyYAML-3.12): yaml.load() API could execute arbitrary Python commands → fix: 6.0.2
+  - CVE-2025-66471 (Python-urllib3-1.23): Streaming API improperly handles highly compressed data → fix: 2.6.0
+  - CVE-2018-18074 (Python-requests-2.18.4): Sends HTTP Authorization header to unintended hosts → fix: 2.32.4
+  - CVE-2024-35195 (Python-requests-2.18.4): Session object does not verify requests after making first → fix: 2.32.4
+  - cZZy3qIIi (sast): yaml_processor.py deserialized by load — insecure deserialization
+  ...
+```
+
+**Result: ~800 chars instead of 55K** — 98.5% reduction — while preserving:
+- What the user provided (vulnerability scan with severity breakdown)
+- Key findings the agent should address (HIGH CVEs with package names and fixes)
+- The SAST finding (code-level vulnerability, different from SCA)
+
+AlignmentCheck can now evaluate whether the agent's reply properly addresses the
+high-severity findings vs. going off-topic or hallucinating non-existent CVEs.
 
 ### Where to Integrate
-In `_scan_single_message()` (scanner_runner.py) during trace construction:
+
+**1. Trace construction in `_scan_single_message()` (scanner_runner.py:194):**
 
 ```python
-# Current (line ~195):
-trace_content = m.get("content", "")
+# Current:
+if m["type"] == "user":
+    msg_trace.append(UserMessage(content=m["content"]))
 
-# Proposed:
-trace_content = summarize_for_trace(m.get("content", ""), m.get("type", "unknown"))
+# Proposed — summarize context messages, never the target:
+if m["type"] == "user":
+    content = summarize_for_trace(m["content"], "user") if i < msg_idx else m["content"]
+    msg_trace.append(UserMessage(content=content))
+elif m["type"] == "assistant":
+    content = m.get("content", "")
+    if i == msg_idx:
+        # Target message: always full content
+        ...
+    elif i in has_user_after:
+        content = summarize_for_trace(content, "assistant")
+        ...
 ```
 
+**2. Session validation in `validate_session_messages()` (scanner_runner.py:65):**
+
+```python
+# Current: reject if any message > 50K
+# Proposed: raise limit or remove — summarization handles large messages at scan time
+SESSION_MSG_SIZE_LIMIT = 200_000  # generous limit; summarizer compacts at trace time
+```
+
+**3. Large message check in `check_trace_for_large_messages()` (scanner_runner.py:114):**
+
+```python
+# Current: skip if any trace message > 12K
+# Proposed: remove this check entirely — summarizer ensures traces stay compact
+# OR: check the *summarized* trace size instead of raw message size
+```
+
+**4. Same changes in `firewall.py` (UI path) for consistency.**
+
 ### What Changes
-- AlignmentCheck traces become much shorter for data-heavy sessions
-- The actual scanning target (the assistant message being evaluated) is **NOT summarized** — only context messages in the trace prefix
-- FactsChecker is NOT affected (it needs full content for fact-checking)
-- PromptGuard is NOT affected (local, scans raw content)
+
+| Component | Before | After |
+|-----------|--------|-------|
+| `SESSION_MSG_SIZE_LIMIT` | 50K (rejects session) | 200K (load it, summarize at scan time) |
+| `MSG_SIZE_LIMIT` check | 12K (skip AlignmentCheck) | Removed — summarizer keeps traces compact |
+| User messages in trace | Raw content (55K chars) | Summarized (~800 chars) |
+| Assistant messages in trace | Raw content | Summarized if context (not target) |
+| Target assistant message | Raw content | **Unchanged — always full content** |
+| FactsChecker | N/A | **Unchanged — needs full content for fact-checking** |
+| PromptGuard | N/A | **Unchanged — local heuristic on raw content** |
+
+### Adding New Domain Summarizers
+
+To support a new data type (e.g., Terraform plans, CloudFormation outputs):
+
+```python
+# In _try_json_summary(), add detection:
+if "terraform_version" in data or "planned_values" in data:
+    return _summarize_terraform_plan(data)
+
+# Then implement the summarizer:
+def _summarize_terraform_plan(data: dict) -> str:
+    resources = data.get("planned_values", {}).get("root_module", {}).get("resources", [])
+    changes = data.get("resource_changes", [])
+    create = sum(1 for c in changes if "create" in c.get("change", {}).get("actions", []))
+    destroy = sum(1 for c in changes if "delete" in c.get("change", {}).get("actions", []))
+    return (
+        f"[Terraform plan: {len(resources)} resources, "
+        f"{create} to create, {destroy} to destroy]"
+    )
+```
 
 ### Action Items
-- [ ] Add `summarize_for_trace()` to `scanner_runner.py`
-- [ ] Apply to trace context messages (not the target assistant message)
-- [ ] Raise `MSG_SIZE_LIMIT` from 12K to 50K (traces are now compact enough)
-- [ ] This enables AlignmentCheck to run on sessions it currently skips entirely
+- [ ] Create `multi_agent_demo/core/trace_summarizer.py` with pluggable summarizer chain
+- [ ] Implement domain summarizers: vulnerability scan, API response, OTEL trace, generic JSON
+- [ ] Integrate into `_scan_single_message()` — summarize context messages only
+- [ ] Raise `SESSION_MSG_SIZE_LIMIT` to 200K (or remove)
+- [ ] Remove or soften `check_trace_for_large_messages()` — no longer needed with summarization
+- [ ] Same changes in `firewall.py` for UI path
+- [ ] Add tests: verify vulnerability scan JSON → compact summary → AlignmentCheck runs
+- [ ] Add tests: verify target assistant message is never summarized
 
 ### Estimated Savings
-- Sessions with JSON user inputs: 60–80% reduction in AlignmentCheck tokens
-- Sessions currently skipped (>12K messages): now scannable
-- No impact on scan quality (behavioral signals are in natural language, not data blobs)
+- Vulnerability scan sessions (55K user input): **98%+ token reduction** in AlignmentCheck traces
+- Sessions currently rejected at load time: **now scannable**
+- Sessions currently skipped by AlignmentCheck: **now scannable**
+- Generic JSON sessions: 80–95% reduction depending on structure
+- No impact on scan quality — behavioral signals preserved, raw data stripped
 
 ---
 
@@ -216,16 +536,21 @@ OpenAI caches system message prefixes automatically when ≥1024 tokens. The con
 
 ## Implementation Priority
 
-| # | Optimization | Effort | Token Savings | Latency Impact |
-|---|-------------|--------|---------------|----------------|
-| 1 | Application-level result cache | Low (new file + wrapping) | 100% on re-runs | Instant on cache hit |
-| 2 | Trace summarization for data blobs | Medium (new function + integration) | 60–80% on data-heavy sessions | Slight improvement (smaller payloads) |
-| 3 | Provider prefix caching (sequential mode) | Low (config flag + conditional) | 30–50% AlignmentCheck input tokens | 2–3x slower (trade-off) |
-| 4 | FactsChecker prompt restructuring | Low (refactor prompt construction) | 40–60% FactsChecker input tokens | Slight improvement |
+| # | Optimization | Effort | Token Savings | Latency Impact | Unlocks |
+|---|-------------|--------|---------------|----------------|---------|
+| 3 | Smart trace summarization | Medium (new module + integration) | 80–98% on data-heavy sessions | Faster (smaller payloads) | Sessions currently rejected/skipped |
+| 2 | Application-level result cache | Low (new file + wrapping) | 100% on re-runs | Instant on cache hit | — |
+| 4 | FactsChecker prompt restructuring | Low (refactor prompt construction) | 40–60% FactsChecker input tokens | Slight improvement | — |
+| 1 | Provider prefix caching (sequential mode) | Low (config flag + conditional) | 30–50% AlignmentCheck input tokens | 2–3x slower (trade-off) | — |
 
-**Recommended order:** 1 → 2 → 4 → 3
+**Recommended order:** 3 → 2 → 4 → 1
 
-Optimization 1 is highest ROI (zero API calls on re-runs). Optimization 2 unlocks scanning for sessions currently rejected. Optimization 4 is a small refactor with good savings. Optimization 3 is a trade-off (cost vs latency) and should be optional.
+Optimization 3 (smart summarization) is now highest priority — it's the only optimization
+that **unlocks scanning for sessions that are currently completely rejected or skipped**.
+Without it, large JSON sessions (vulnerability scans, API responses) cannot be analyzed at all.
+Optimization 2 (result cache) is next for repeat-run savings. Optimization 4 is a small
+refactor with good per-call savings. Optimization 1 is a latency-vs-cost trade-off and should
+be optional.
 
 ---
 
@@ -233,13 +558,16 @@ Optimization 1 is highest ROI (zero API calls on re-runs). Optimization 2 unlock
 
 | File | Optimizations |
 |------|---------------|
-| `multi_agent_demo/core/cache.py` (new) | #1 — result cache module |
-| `multi_agent_demo/core/scanner_runner.py` | #1 (cache wrapping), #2 (trace summarization), #3 (sequential flag) |
-| `multi_agent_demo/firewall.py` | #1 (cache wrapping for UI path) |
+| `multi_agent_demo/core/trace_summarizer.py` (new) | #3 — pluggable summarizer chain with domain detectors |
+| `multi_agent_demo/core/cache.py` (new) | #2 — result cache module |
+| `multi_agent_demo/core/scanner_runner.py` | #3 (integrate summarizer + raise/remove size limits), #2 (cache wrapping), #1 (sequential flag) |
+| `multi_agent_demo/firewall.py` | #3 (integrate summarizer for UI path), #2 (cache wrapping) |
 | `multi_agent_demo/scanners/nemo_scanners.py` | #4 (prompt restructuring) |
 
 ## Metrics to Track
-- Cache hit rate (optimization 1)
+- AlignmentCheck skip rate before/after (optimization 3 — should drop to near zero)
+- Session rejection rate before/after (optimization 3 — currently rejects >50K sessions)
+- Summarized trace size vs original message size (optimization 3)
+- Cache hit rate (optimization 2)
 - Tokens per session before/after (all optimizations)
-- AlignmentCheck skip rate reduction (optimization 2)
-- Wall-clock time per session (optimization 3 trade-off)
+- Wall-clock time per session (optimization 1 trade-off)
