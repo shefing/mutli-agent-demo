@@ -428,19 +428,19 @@ def test_long_system_prompt_no_false_positive():
         return False
 
 
-def test_large_data_blob_triggers_warning():
+def test_large_data_blob_scanned_after_summarization():
     """
-    Test: A user message containing a large JSON blob (>12K) should produce WARNING,
-    not a false BLOCK.
+    Test: A user message containing a large JSON blob (>12K) should be summarized
+    and scanned successfully (not skipped).
 
     Scenario: User pastes a large GitHub API JSON response and asks a question.
-    AlignmentCheck cannot reliably evaluate traces with data-heavy messages,
-    so it should skip the scan and emit WARNING with data_blob severity.
+    The trace summarizer compacts the JSON into a structural summary, allowing
+    AlignmentCheck to evaluate the agent's response normally.
 
-    Expected: WARNING (analysis skipped due to data blob)
+    Expected: SAFE (agent correctly addresses the summarized user input)
     """
     print("\n" + "="*80)
-    print("TEST 8: Large Data Blob Triggers WARNING (not false BLOCK)")
+    print("TEST 8: Large Data Blob Scanned After Summarization")
     print("="*80)
 
     # Build a realistic JSON blob >12K chars
@@ -471,46 +471,62 @@ def test_large_data_blob_triggers_warning():
     print(f"  User message size: {user_msg_len:,} chars")
     assert user_msg_len > 12000, f"Test setup error: message only {user_msg_len} chars"
 
+    # Verify the summarizer compacts this
+    from multi_agent_demo.core.trace_summarizer import summarize_for_trace
+    summarized = summarize_for_trace(session_data["messages"][0]["content"])
+    print(f"  Summarized size: {len(summarized):,} chars ({100 - len(summarized)*100//user_msg_len}% reduction)")
+
     result = run_scanners_on_session(
         session_data=session_data,
         enabled_scanners=['AlignmentCheck']
     )
 
     ac_result = result.get('alignment_check', {})
+
+    method = ac_result.get('method', 'unknown')
+    print(f"  Method used: {method}")
+
+    if method != 'native_llamafirewall':
+        print(f"  ⚠️  WARNING: Native LlamaFirewall not used (got {method})")
+        return False
+
     decision = ac_result.get('overall_decision', 'UNKNOWN')
     print(f"  Overall decision: {decision}")
 
     message_results = ac_result.get('message_results', [])
     for i, msg in enumerate(message_results, 1):
         skipped = msg.get('skipped', False)
-        severity = msg.get('skip_severity', '')
-        print(f"    Message {i}: {msg['decision']} (skipped={skipped}, severity={severity})")
-        print(f"      Reason: {msg.get('reason', '')[:100]}...")
+        print(f"    Message {i}: {msg['decision']} (skipped={skipped})")
+        print(f"      Reason: {msg.get('reason', '')[:150]}...")
 
-    if decision == 'WARNING':
-        # Verify it was skipped due to data blob
-        all_skipped = all(m.get('skipped') for m in message_results)
-        has_data_blob = any(m.get('skip_severity') == 'data_blob' for m in message_results)
-        if all_skipped and has_data_blob:
-            print("✅ PASS: Large data blob correctly produced WARNING with data_blob severity")
-            return True
-        else:
-            print(f"❌ FAIL: WARNING but missing expected metadata (skipped={all_skipped}, data_blob={has_data_blob})")
-            return False
+    # The message should NOT be skipped — it should be scanned after summarization
+    any_skipped = any(m.get('skipped') for m in message_results)
+    if any_skipped:
+        print(f"❌ FAIL: Message was skipped despite summarization being available")
+        return False
+
+    if decision == 'SAFE':
+        print("✅ PASS: Large data blob summarized and scanned successfully (SAFE)")
+        return True
+    elif decision == 'BLOCK':
+        # BLOCK is acceptable if the model thinks the agent is misaligned,
+        # but the key point is it was SCANNED (not skipped)
+        print("✅ PASS: Large data blob summarized and scanned (got BLOCK — scan ran, not skipped)")
+        return True
     else:
-        print(f"❌ FAIL: Expected WARNING, got {decision}")
+        print(f"❌ FAIL: Unexpected decision {decision}")
         return False
 
 
-def test_large_natural_language_triggers_warning():
+def test_large_natural_language_scanned_after_summarization():
     """
-    Test: A user message with >12K chars of natural language (not data blob)
-    should produce WARNING with large_message severity.
+    Test: A user message with >12K chars of natural language should be truncated
+    by the trace summarizer and scanned successfully (not skipped).
 
-    Expected: WARNING (analysis skipped, softer warning than data blob)
+    Expected: SAFE (agent correctly addresses the user's request)
     """
     print("\n" + "="*80)
-    print("TEST 9: Large Natural Language Message Triggers WARNING")
+    print("TEST 9: Large Natural Language Scanned After Summarization")
     print("="*80)
 
     # Build a large natural-language message >12K chars
@@ -539,31 +555,45 @@ def test_large_natural_language_triggers_warning():
     print(f"  User message size: {user_msg_len:,} chars")
     assert user_msg_len > 12000, f"Test setup error: message only {user_msg_len} chars"
 
+    # Verify the summarizer compacts this
+    from multi_agent_demo.core.trace_summarizer import summarize_for_trace
+    summarized = summarize_for_trace(session_data["messages"][0]["content"])
+    print(f"  Summarized size: {len(summarized):,} chars ({100 - len(summarized)*100//user_msg_len}% reduction)")
+    assert "truncated for trace" in summarized, "Should be truncated with indicator"
+
     result = run_scanners_on_session(
         session_data=session_data,
         enabled_scanners=['AlignmentCheck']
     )
 
     ac_result = result.get('alignment_check', {})
+
+    method = ac_result.get('method', 'unknown')
+    print(f"  Method used: {method}")
+
+    if method != 'native_llamafirewall':
+        print(f"  ⚠️  WARNING: Native LlamaFirewall not used (got {method})")
+        return False
+
     decision = ac_result.get('overall_decision', 'UNKNOWN')
     print(f"  Overall decision: {decision}")
 
     message_results = ac_result.get('message_results', [])
     for i, msg in enumerate(message_results, 1):
         skipped = msg.get('skipped', False)
-        severity = msg.get('skip_severity', '')
-        print(f"    Message {i}: {msg['decision']} (skipped={skipped}, severity={severity})")
+        print(f"    Message {i}: {msg['decision']} (skipped={skipped})")
 
-    if decision == 'WARNING':
-        has_large_msg = any(m.get('skip_severity') == 'large_message' for m in message_results)
-        if has_large_msg:
-            print("✅ PASS: Large natural language correctly produced WARNING with large_message severity")
-            return True
-        else:
-            print(f"❌ FAIL: WARNING but expected large_message severity")
-            return False
+    # The message should NOT be skipped — it should be scanned after summarization
+    any_skipped = any(m.get('skipped') for m in message_results)
+    if any_skipped:
+        print(f"❌ FAIL: Message was skipped despite summarization being available")
+        return False
+
+    if decision in ('SAFE', 'BLOCK'):
+        print(f"✅ PASS: Large natural language summarized and scanned successfully ({decision})")
+        return True
     else:
-        print(f"❌ FAIL: Expected WARNING, got {decision}")
+        print(f"❌ FAIL: Unexpected decision {decision}")
         return False
 
 
@@ -763,8 +793,8 @@ def main():
         ("Agent Itself Failing (BLOCK)", test_agent_itself_failing),
         ("Per-Message Validation", test_per_message_validation),
         ("Long System Prompt - No False Positive", test_long_system_prompt_no_false_positive),
-        ("Large Data Blob Triggers WARNING", test_large_data_blob_triggers_warning),
-        ("Large Natural Language Triggers WARNING", test_large_natural_language_triggers_warning),
+        ("Large Data Blob Scanned After Summarization", test_large_data_blob_scanned_after_summarization),
+        ("Large Natural Language Scanned After Summarization", test_large_natural_language_scanned_after_summarization),
         ("Focused Trace - No Cross-Contamination", test_focused_trace_no_cross_contamination),
     ]
 

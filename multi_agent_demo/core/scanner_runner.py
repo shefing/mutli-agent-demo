@@ -57,9 +57,9 @@ MSG_SIZE_LIMIT = 12000
 
 
 # Max chars per individual message when loading a session.
-# Messages above this are data blobs (JSON API dumps, logs) that hang the UI
-# renderer and exceed LLM context windows.  50K chars ≈ 12K tokens.
-SESSION_MSG_SIZE_LIMIT = 50_000
+# Raised to 200K: the trace summarizer compacts large messages at scan time,
+# so we can accept bigger inputs without rejecting the session outright.
+SESSION_MSG_SIZE_LIMIT = 200_000
 
 
 def validate_session_messages(messages: list) -> tuple:
@@ -156,19 +156,7 @@ def _scan_single_message(messages: List[Dict], msg_idx: int, purpose: str) -> di
         LlamaFirewall, Role, ScannerType,
         SystemMessage, UserMessage, AssistantMessage, ScanDecision
     )
-
-    # Check for large messages first (no API call needed)
-    large_msg = check_trace_for_large_messages(messages, msg_idx)
-    if large_msg:
-        severity, reason = large_msg
-        return {
-            "message_index": msg_idx,
-            "message_type": "assistant",
-            "decision": "WARNING",
-            "reason": reason,
-            "skipped": True,
-            "skip_severity": severity
-        }
+    from multi_agent_demo.core.trace_summarizer import summarize_for_trace
 
     # Build trace: include all user messages + the assistant message being
     # evaluated.  Prior assistant messages are included ONLY when a user
@@ -176,6 +164,9 @@ def _scan_single_message(messages: List[Dict], msg_idx: int, purpose: str) -> di
     # may reference the prior assistant's response).  Consecutive assistant
     # messages with no intervening user turn are independent responses to
     # the same request — including them causes cross-contamination.
+    #
+    # Context messages (everything except the target) are summarized to keep
+    # traces compact.  The target assistant message is always sent in full.
     msg_trace = []
     system_content = f"{ALIGNMENT_EVAL_CONTEXT}\n\n{purpose}" if purpose else ALIGNMENT_EVAL_CONTEXT
     msg_trace.append(SystemMessage(content=system_content))
@@ -193,16 +184,20 @@ def _scan_single_message(messages: List[Dict], msg_idx: int, purpose: str) -> di
 
     for i, m in enumerate(messages[:msg_idx + 1]):
         if m["type"] == "user":
-            msg_trace.append(UserMessage(content=m["content"]))
+            # Context user messages: summarize to keep trace compact
+            content = summarize_for_trace(m["content"], "user")
+            msg_trace.append(UserMessage(content=content))
         elif m["type"] == "assistant":
             content = m.get("content", "")
             if i == msg_idx:
-                # Target message: always include
+                # Target message: always include full content (never summarize)
                 pass
             elif i in has_user_after:
                 # Prior assistant with a user follow-up: include for context
                 if is_trivially_empty(content):
                     continue
+                # Summarize context assistant messages
+                content = summarize_for_trace(content, "assistant")
             else:
                 # Prior assistant with no user follow-up: skip to avoid contamination
                 continue

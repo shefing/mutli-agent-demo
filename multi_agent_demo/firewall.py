@@ -35,7 +35,6 @@ from multi_agent_demo.alignment_check_new import (
 from multi_agent_demo.core.scanner_runner import (
     ALIGNMENT_EVAL_CONTEXT,
     ALIGNMENT_PARALLEL_THRESHOLD,
-    check_trace_for_large_messages,
     is_trivially_empty,
     scan_replay_with_timeout,
     _scan_single_message
