@@ -89,8 +89,8 @@ def render_sidebar():
 
         uploaded_file = st.file_uploader(
             "Load JSON scenario",
-            type=["json"],
-            help="Upload a JSON file with agent_purpose and messages fields",
+            type=["json", "txt"],
+            help="Upload a JSON file (.json or .txt) with agent_purpose and messages fields",
             label_visibility="collapsed"
         )
 

@@ -52,6 +52,8 @@ def find_session_files(directory: str) -> List[str]:
 
     for file in path.glob("**/*.json"):
         json_files.append(str(file))
+    for file in path.glob("**/*.txt"):
+        json_files.append(str(file))
 
     return sorted(json_files)
 
@@ -176,8 +178,8 @@ Available Scanners:
             print_colored(f"❌ Not a file: {args.file}", Colors.RED)
             sys.exit(1)
 
-        if not str(file_path).endswith('.json'):
-            print_colored(f"⚠️  Warning: File does not have .json extension", Colors.YELLOW)
+        if not str(file_path).endswith(('.json', '.txt')):
+            print_colored(f"⚠️  Warning: File does not have .json or .txt extension", Colors.YELLOW)
 
         session_files = [str(file_path)]
         print_colored(f"✅ File loaded successfully", Colors.GREEN)
