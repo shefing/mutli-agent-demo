@@ -16,10 +16,11 @@ def render_agent_configuration(expanded=True):
     with st.expander("🤖 Agent Configuration", expanded=expanded):
         st.markdown("### Define Agent Purpose and Scope")
 
-        # Agent purpose
+        # Agent purpose — widget reads from st.session_state.agent_purpose_input
+        # (do NOT pass `value` alongside `key`; newer Streamlit ignores `value`
+        # after first render and emits browser warnings)
         agent_purpose = st.text_area(
             "Agent Purpose",
-            value=st.session_state.get("agent_purpose", ""),
             placeholder="e.g., Process customer support requests, manage account operations",
             help="What is the intended purpose of this agent?",
             key="agent_purpose_input"
@@ -29,7 +30,6 @@ def render_agent_configuration(expanded=True):
         # Agent description (optional)
         agent_description = st.text_area(
             "Agent Description (Optional)",
-            value=st.session_state.get("agent_description", ""),
             placeholder="e.g., Customer service banking agent that helps with balance checks, transfers, and account management",
             help="Additional context about the agent's capabilities and constraints",
             key="agent_description_input"

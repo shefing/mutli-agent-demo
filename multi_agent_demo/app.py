@@ -104,9 +104,15 @@ def initialize_session_state():
     # Agent configuration (shared across pages)
     if "agent_purpose" not in st.session_state:
         st.session_state.agent_purpose = ""
+    # Widget keys — widgets with `key` read from st.session_state[key],
+    # so these must be initialized before the widget renders.
+    if "agent_purpose_input" not in st.session_state:
+        st.session_state.agent_purpose_input = ""
 
     if "agent_description" not in st.session_state:
         st.session_state.agent_description = ""
+    if "agent_description_input" not in st.session_state:
+        st.session_state.agent_description_input = ""
 
     # Real-time page state
     if "conversations" not in st.session_state:
@@ -131,17 +137,28 @@ def initialize_session_state():
             "DataDisclosureGuard": PRESIDIO_AVAILABLE
         }
 
-    # Real-time input fields
+    # Real-time input fields — both the logical state and the widget keys
+    # must be initialized (widgets with `key` read from session_state[key]).
     if "input_user_content" not in st.session_state:
         st.session_state.input_user_content = ""
+    if "user_message_input" not in st.session_state:
+        st.session_state.user_message_input = ""
     if "input_assistant_content" not in st.session_state:
         st.session_state.input_assistant_content = ""
+    if "assistant_message_input" not in st.session_state:
+        st.session_state.assistant_message_input = ""
     if "input_action_name" not in st.session_state:
         st.session_state.input_action_name = ""
+    if "action_name_input" not in st.session_state:
+        st.session_state.action_name_input = ""
     if "input_thought" not in st.session_state:
         st.session_state.input_thought = ""
+    if "thought_input" not in st.session_state:
+        st.session_state.thought_input = ""
     if "input_params" not in st.session_state:
         st.session_state.input_params = ""
+    if "params_input" not in st.session_state:
+        st.session_state.params_input = ""
     if "editing_message_index" not in st.session_state:
         st.session_state.editing_message_index = None
 

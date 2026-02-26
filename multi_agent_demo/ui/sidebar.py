@@ -16,6 +16,9 @@ def _load_scenario_data(purpose, messages, filename=None):
         "messages": messages
     }
     st.session_state.agent_purpose = purpose
+    # Sync the widget key directly — Streamlit widgets with a `key` read from
+    # st.session_state[key] on subsequent renders, ignoring the `value` param.
+    st.session_state.agent_purpose_input = purpose
     st.session_state.test_results = []
     st.session_state.loaded_scenario_filename = filename
     if st.session_state.get("auto_run_after_load", True):
@@ -66,11 +69,17 @@ def render_sidebar():
             else:
                 help_text = description
 
+            # Initialize widget key from enabled_scanners (no `value` + `key` anti-pattern)
+            widget_key = f"enable_{scanner_name}"
+            if widget_key not in st.session_state:
+                st.session_state[widget_key] = (
+                    st.session_state.enabled_scanners.get(scanner_name, False) and not is_disabled
+                )
+
             enabled = st.checkbox(
                 f"{icon} {display_name}",
-                value=st.session_state.enabled_scanners.get(scanner_name, False) and not is_disabled,
                 help=help_text,
-                key=f"enable_{scanner_name}",
+                key=widget_key,
                 disabled=is_disabled
             )
             st.session_state.enabled_scanners[scanner_name] = enabled
@@ -124,13 +133,14 @@ def render_sidebar():
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        # Auto-run toggle
+        # Auto-run toggle — use key only (no `value`), init widget key in session state
         if "auto_run_after_load" not in st.session_state:
             st.session_state.auto_run_after_load = True
+        if "auto_run_toggle" not in st.session_state:
+            st.session_state.auto_run_toggle = st.session_state.auto_run_after_load
 
         st.checkbox(
             "Auto-run tests after load",
-            value=st.session_state.auto_run_after_load,
             key="auto_run_toggle",
             on_change=lambda: setattr(st.session_state, 'auto_run_after_load',
                                        st.session_state.auto_run_toggle)

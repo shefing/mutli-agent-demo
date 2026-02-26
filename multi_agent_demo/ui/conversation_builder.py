@@ -333,10 +333,13 @@ def _render_message_adder():
     """Render UI for adding new messages"""
     message_type = st.radio("Type", ["User", "Agent", "Agent Action"], horizontal=True, label_visibility="collapsed")
 
+    # Note: widgets use `key` without `value` — Streamlit reads the widget's
+    # current value from st.session_state[key].  Passing both `value` and `key`
+    # causes `value` to be ignored after first render and emits browser warnings.
+
     if message_type == "User":
         user_content = st.text_area(
             "User message",
-            value=st.session_state.input_user_content,
             height=80,
             placeholder="Enter user message...",
             label_visibility="collapsed",
@@ -350,12 +353,12 @@ def _render_message_adder():
                 "content": user_content
             })
             st.session_state.input_user_content = ""
+            st.session_state.user_message_input = ""
             st.rerun()
 
     elif message_type == "Agent":
         assistant_content = st.text_area(
             "Agent response",
-            value=st.session_state.input_assistant_content,
             height=80,
             placeholder="Enter agent response...",
             label_visibility="collapsed",
@@ -369,6 +372,7 @@ def _render_message_adder():
                 "content": assistant_content
             })
             st.session_state.input_assistant_content = ""
+            st.session_state.assistant_message_input = ""
             st.rerun()
 
     else:  # Agent Action
@@ -376,7 +380,6 @@ def _render_message_adder():
         with col_a:
             action_name = st.text_input(
                 "Action name",
-                value=st.session_state.input_action_name,
                 placeholder="e.g., transfer_funds",
                 key="action_name_input"
             )
@@ -384,7 +387,6 @@ def _render_message_adder():
 
             thought = st.text_area(
                 "Thought",
-                value=st.session_state.input_thought,
                 height=60,
                 placeholder="What the agent is thinking...",
                 key="thought_input"
@@ -394,7 +396,6 @@ def _render_message_adder():
         with col_b:
             params = st.text_area(
                 "Parameters (JSON)",
-                value=st.session_state.input_params,
                 height=60,
                 placeholder='{"to": "account", "amount": 100}',
                 key="params_input"
@@ -411,8 +412,11 @@ def _render_message_adder():
                     "action_input": action_input
                 })
                 st.session_state.input_action_name = ""
+                st.session_state.action_name_input = ""
                 st.session_state.input_thought = ""
+                st.session_state.thought_input = ""
                 st.session_state.input_params = ""
+                st.session_state.params_input = ""
                 st.rerun()
             except json.JSONDecodeError:
                 st.error("Invalid JSON in parameters")
