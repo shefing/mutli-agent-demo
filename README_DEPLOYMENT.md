@@ -1,4 +1,4 @@
-# Deployment Guide - AI Agent Guards Demo
+# Deployment Guide - Omniguard demo
 
 ## Current Issue with Streamlit Cloud
 
