@@ -106,14 +106,17 @@ def render():
                     unsafe_allow_html=True
                 )
 
+            # Sync widget key from conversation state (widget reads from
+            # session_state[key], not from `value` param after first render)
             purpose_val = st.session_state.current_conversation["purpose"]
+            if "sticky_purpose_input" not in st.session_state:
+                st.session_state.sticky_purpose_input = purpose_val
             line_count = purpose_val.count('\n') + 1
             char_lines = max(1, len(purpose_val) // 70)
             effective_lines = max(line_count, char_lines)
             height = max(38, min(200, 18 + 20 * effective_lines))
             purpose = st.text_area(
                 "Agent Purpose",
-                value=purpose_val,
                 placeholder="e.g., Check account balance and show transactions",
                 height=height,
                 key="sticky_purpose_input"

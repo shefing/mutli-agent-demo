@@ -16,9 +16,11 @@ def _load_scenario_data(purpose, messages, filename=None):
         "messages": messages
     }
     st.session_state.agent_purpose = purpose
-    # Sync the widget key directly — Streamlit widgets with a `key` read from
-    # st.session_state[key] on subsequent renders, ignoring the `value` param.
-    st.session_state.agent_purpose_input = purpose
+    # Sync ALL widget keys that display the purpose — Streamlit widgets with
+    # a `key` read from st.session_state[key] on subsequent renders, ignoring
+    # the `value` param.
+    st.session_state.agent_purpose_input = purpose      # common.py (deviations page)
+    st.session_state.sticky_purpose_input = purpose     # realtime_page.py
     st.session_state.test_results = []
     st.session_state.loaded_scenario_filename = filename
     if st.session_state.get("auto_run_after_load", True):
