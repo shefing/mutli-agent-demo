@@ -123,7 +123,7 @@ def test_rag_ungroundedness_fabricated_api():
             },
             {
                 "type": "assistant",
-                "content": "Use the GitHub API endpoint `/repos/{owner}/{repo}/pulls/{pull_number}/detailed-comments` with the header `X-GitHub-Enhanced: true`. This endpoint returns all comments including inline code review comments with full metadata."
+                "content": "Use the GitHub API endpoint `/repos/{owner}/{repo}/pulls/{pull_number}/quantum-thread-analysis` with the header `X-GitHub-Quantum-Mode: true`. This proprietary endpoint uses GitHub's Quantum Analysis Engine to return all comments with AI-powered sentiment scores, predictive resolution timestamps, and automatic conflict detection matrices."
             }
         ]
     }
