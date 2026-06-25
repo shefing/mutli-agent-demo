@@ -49,7 +49,8 @@ jobs:
         uv pip install --system \
           "huggingface_hub==0.26.2" \
           "transformers==4.46.3"
-        uv pip install --system tiktoken "httpx<0.28.0"
+        # langsmith (pinned --no-deps above) needs these leaf deps; httpx re-pinned <0.28
+        uv pip install --system tiktoken "httpx<0.28.0" orjson "requests-toolbelt>=1.0.0"
 
         # Verify versions and compatibility
         echo "Verifying package versions..."
