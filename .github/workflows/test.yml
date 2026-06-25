@@ -34,8 +34,9 @@ jobs:
         # Fix NeMo GuardRails + OpenAI compatibility issue
         uv pip install --system nemoguardrails presidio-analyzer presidio-anonymizer
 
-        # Force compatible versions AFTER all installs (later installs can upgrade deps)
-        # nemoguardrails pulls langchain 1.x which is incompatible with 0.2.x sub-packages
+        # Force compatible versions AFTER all installs (later installs can upgrade deps).
+        # nemoguardrails pulls langchain 1.x which is incompatible with 0.2.x sub-packages,
+        # so the langchain stack is pinned with --no-deps to override nemo's resolution.
         uv pip install --system --reinstall --no-deps \
           "openai==1.54.0" \
           "langchain==0.2.16" \
@@ -44,13 +45,23 @@ jobs:
           "langchain-openai==0.1.25" \
           "langsmith==0.1.147"
 
+        # --no-deps above strips the langchain stack's transitive deps. Install them
+        # explicitly WITH resolution (pulls jsonpatch->jsonpointer, dataclasses-json->
+        # marshmallow/typing-inspect, langsmith->orjson/requests-toolbelt, etc.).
+        # langsmith<0.2 honors the pinned 0.1.147; numpy<2 / openai pin stay intact.
+        uv pip install --system \
+          "PyYAML>=5.3" "SQLAlchemy<3,>=1.4" "aiohttp>=3.8.3,<4" "async-timeout>=4.0.0,<5.0.0" \
+          "dataclasses-json<0.7,>=0.5.7" "jsonpatch<2.0,>=1.33" "langsmith==0.1.147" \
+          "numpy<2" "packaging<25,>=23.2" "requests<3,>=2" "tenacity!=8.4.0,<9.0.0,>=8.1.0" \
+          "orjson" "requests-toolbelt>=1.0.0"
+
         # llamafirewall needs HfFolder (removed in huggingface_hub 1.x)
         # Let uv resolve the full dependency tree (transformers, tokenizers, etc.)
         uv pip install --system \
           "huggingface_hub==0.26.2" \
           "transformers==4.46.3"
-        # langsmith (pinned --no-deps above) needs these leaf deps; httpx re-pinned <0.28
-        uv pip install --system tiktoken "httpx<0.28.0" orjson "requests-toolbelt>=1.0.0"
+        # Re-pin httpx<0.28 LAST so the resolves above can't pull a newer httpx.
+        uv pip install --system tiktoken "httpx<0.28.0"
 
         # Verify versions and compatibility
         echo "Verifying package versions..."
