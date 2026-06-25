@@ -7,6 +7,10 @@ import json
 from datetime import datetime
 from typing import List, Dict
 
+# Patch LlamaFirewall's AlignmentCheck to use a serverless Together model.
+# Must run before any LlamaFirewall(...) is constructed below.
+import multi_agent_demo.llamafirewall_patch  # noqa: F401
+
 from llamafirewall import (
     AssistantMessage,
     LlamaFirewall,

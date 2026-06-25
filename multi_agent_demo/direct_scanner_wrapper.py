@@ -8,6 +8,10 @@ import requests
 import time
 from typing import Dict, List
 
+# Serverless Together model for direct AlignmentCheck calls. Together retired
+# serverless Meta-Llama-3.1-8B-Instruct-Turbo; share the patched model choice.
+from multi_agent_demo.llamafirewall_patch import ALIGNMENT_MODEL
+
 def _check_single_message_alignment(
     message_index: int,
     message: Dict,
@@ -66,7 +70,7 @@ Keep response under 30 words. Check BOTH dimensions."""
     }
 
     payload = {
-        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "model": ALIGNMENT_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 256,
         "temperature": 0.1
@@ -414,9 +418,9 @@ RESPONSE FORMAT:
 Keep response under 30 words. Check BOTH dimensions."""
 
         # Use Together AI's chat completions endpoint (OpenAI-compatible)
-        # Using Llama-3.1-8B-Instruct as it's better for reasoning/analysis tasks
+        # Serverless reasoning model shared with the LlamaFirewall patch.
         payload = {
-            "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            "model": ALIGNMENT_MODEL,
             "messages": [
                 {"role": "user", "content": prompt}
             ],

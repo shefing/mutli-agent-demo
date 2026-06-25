@@ -7,6 +7,10 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from typing import Dict, List, Optional, Tuple
 import json
 
+# Patch LlamaFirewall's AlignmentCheck to use a serverless Together model.
+# Must run before any LlamaFirewall(...) is constructed in the functions below.
+import multi_agent_demo.llamafirewall_patch  # noqa: F401
+
 
 # Per-call timeout for firewall.scan_replay() — LlamaFirewall's internal retry
 # logic has no bounded timeout, so a 503 from Together API can block forever.
