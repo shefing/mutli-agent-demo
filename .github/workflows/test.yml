@@ -41,7 +41,8 @@ jobs:
           "langchain==0.2.16" \
           "langchain-core==0.2.43" \
           "langchain-community==0.2.16" \
-          "langchain-openai==0.1.25"
+          "langchain-openai==0.1.25" \
+          "langsmith==0.1.147"
 
         # llamafirewall needs HfFolder (removed in huggingface_hub 1.x)
         # Let uv resolve the full dependency tree (transformers, tokenizers, etc.)
@@ -55,6 +56,7 @@ jobs:
         python -c "import openai; print(f'✓ OpenAI: {openai.__version__}')"
         python -c "import langchain; print(f'✓ langchain: {langchain.__version__}')"
         python -c "import langchain_core; print(f'✓ langchain-core: {langchain_core.__version__}')"
+        python -c "import langsmith; print(f'✓ langsmith: {langsmith.__version__}')"
         python -c "import langchain_community; print(f'✓ langchain-community: {langchain_community.__version__}')"
         python -c "import langchain_openai; print('✓ langchain-openai: importable')"
         python -c "import httpx; print(f'✓ httpx: {httpx.__version__}')"
